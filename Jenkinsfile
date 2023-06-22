@@ -166,7 +166,7 @@ pipeline {
                             def tox = fileLoader.fromGit(
                                                         'tox',
                                                         'https://github.com/UIUCLibrary/jenkins_helper_scripts.git',
-                                                        '4',
+                                                        '8',
                                                         null,
                                                         ''
                                                         )
@@ -177,14 +177,16 @@ pipeline {
                                 label: 'linux && docker',
                                 dockerfile: 'ci/docker/linux/tox/Dockerfile',
                                 dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
-                                dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip"
+                                dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
+                                retry: 2
                             )
                             windowsJobs = tox.getToxTestsParallel(
                                 envNamePrefix: 'Tox Windows',
                                 label: 'windows && docker && x86',
                                 dockerfile: 'ci/docker/windows/tox/Dockerfile',
                                 dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE',
-                                dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip"
+                                dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
+                                retry: 2
                             )
                             parallel(linuxJobs + windowsJobs)
                         }
