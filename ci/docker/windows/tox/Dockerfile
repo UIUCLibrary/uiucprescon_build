@@ -116,10 +116,11 @@ ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-COPY requirements/ c:/requirements
+COPY requirements-ci.txt c:/python_requirements/
+COPY requirements/ c:/python_requirements/requirements
 RUN python -m pip install pip --upgrade ; `
     pip install wheel ; `
-    pip install -r c:\requirements\requirements-tox.txt devpi_client
+    pip install -r c:\python_requirements\requirements-ci.txt
 ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 WORKDIR C:/src
