@@ -3,6 +3,5 @@ flake8
 lxml
 mypy
 pytest
-pytest-runner
 pylint
 sphinx
