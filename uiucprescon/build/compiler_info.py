@@ -48,8 +48,12 @@ def get_visual_studio_version():
 
     for v in possible_versions:
         try:
-            winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key % v, 0,
-                            winreg.KEY_ALL_ACCESS)
+            winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                key % v,
+                0,
+                winreg.KEY_ALL_ACCESS
+            )
             installed_versions.append(v)
         except Exception as e:
             pass
@@ -76,10 +80,11 @@ def get_clang_version():
             # This ensures extension modules are built with correct
             # compatibility values, specifically LDSHARED which can use
             # '-undefined dynamic_lookup' which only works on >= 10.3.
-            cur_target = os.environ.get('MACOSX_DEPLOYMENT_TARGET', _cfg_target)
+            cur_target =\
+                os.environ.get('MACOSX_DEPLOYMENT_TARGET', _cfg_target)
+
             cur_target_split = [int(x) for x in cur_target.split('.')]
-            if _cfg_target_split[:2] >= [10, 3] and cur_target_split[:2] < [10,
-                                                                            3]:
+            if _cfg_target_split[:2] >= [10, 3] > cur_target_split[:2]:
                 my_msg = ('$MACOSX_DEPLOYMENT_TARGET mismatch: '
                           'now "%s" but "%s" during configure;'
                           'must use 10.3 or later'
@@ -160,4 +165,3 @@ def get_compiler_version():
     if len(parsed_version) <= 2:
         return full_version
     return f"{parsed_version[0]}.{parsed_version[1]}"
-

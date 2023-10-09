@@ -11,11 +11,15 @@ import platform
 from distutils import ccompiler
 from pathlib import Path
 from uiucprescon.build.deps import get_win_deps
-from uiucprescon.build.compiler_info import get_compiler_version, get_compiler_name
+from uiucprescon.build.compiler_info import (
+    get_compiler_version,
+    get_compiler_name
+)
 import json
 from distutils.dist import Distribution
 import toml
 from conans.client import conan_api, conf
+
 
 class ConanBuildInfoParser:
     def __init__(self, fp):
@@ -76,21 +80,31 @@ class ConanBuildInfoTXT(AbsConanBuildInfo):
                     "bindirs": data.get(f"bindirs_{library_name}", []),
                     "resdirs": data.get(f"resdirs_{library_name}", []),
                     "builddirs": data.get(f"builddirs_{library_name}", []),
-                    "system_libs": data.get(f"system_libs_{library_name}", []),
-                    "defines": data.get(f"defines_{library_name}", []),
-                    "cppflags": data.get(f"cppflags_{library_name}", []),
-                    "cxxflags": data.get(f"cxxflags_{library_name}", []),
+                    "system_libs":
+                        data.get(f"system_libs_{library_name}", []),
+                    "defines":
+                        data.get(f"defines_{library_name}", []),
+                    "cppflags":
+                        data.get(f"cppflags_{library_name}", []),
+                    "cxxflags":
+                        data.get(f"cxxflags_{library_name}", []),
                     "cflags": data.get(f"cflags_{library_name}", []),
-                    "sharedlinkflags": data.get(f"sharedlinkflags_{library_name}", []),
-                    "exelinkflags": data.get(f"exelinkflags_{library_name}", []),
+                    "sharedlinkflags":
+                        data.get(f"sharedlinkflags_{library_name}", []),
+                    "exelinkflags":
+                        data.get(f"exelinkflags_{library_name}", []),
                     "sysroot": data.get(f"sysroot_{library_name}", []),
-                    "frameworks": data.get(f"frameworks_{library_name}", []),
-                    "frameworkdirs": data.get(f"frameworkdirs_{library_name}", []),
+                    "frameworks":
+                        data.get(f"frameworks_{library_name}", []),
+                    "frameworkdirs":
+                        data.get(f"frameworkdirs_{library_name}", []),
                     "rootpath": data.get(f"rootpath_{library_name}", []),
                     "name": library_name,
                     "version": version[0] if version else None,
-                    "generatornames": data.get(f"generatornames_{library_name}", []),
-                    "generatorfilenames": data.get(f"generatorfilenames_{library_name}", []),
+                    "generatornames":
+                        data.get(f"generatornames_{library_name}", []),
+                    "generatorfilenames":
+                        data.get(f"generatorfilenames_{library_name}", []),
                 }
         return {
             "definitions": definitions,

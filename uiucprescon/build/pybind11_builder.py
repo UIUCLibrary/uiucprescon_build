@@ -51,7 +51,10 @@ class BuildPybind11Extension(build_ext):
         conan_info_dir = os.environ.get('CONAN_BUILD_INFO_DIR')
         if conan_info_dir:
             conanfileinfo_locations.insert(0, conan_info_dir)
-        conanbuildinfo = conan_libs.locate_conanbuildinfo(conanfileinfo_locations)
+
+        conanbuildinfo =\
+            conan_libs.locate_conanbuildinfo(conanfileinfo_locations)
+
         if conanbuildinfo:
             strategies.insert(
                 0,
@@ -108,8 +111,15 @@ class BuildPybind11Extension(build_ext):
             else:
                 ext.runtime_library_dirs.append(os.path.abspath(lib_output))
                 ext.library_dirs.insert(0, os.path.abspath(lib_output))
-        ext.library_dirs = list(parse_conan_build_info(conan_build_info, "libdirs")) + ext.library_dirs
-        ext.include_dirs = list(parse_conan_build_info(conan_build_info, "includedirs")) + ext.include_dirs
+
+        ext.library_dirs = list(
+            parse_conan_build_info(conan_build_info, "libdirs")
+        ) + ext.library_dirs
+
+        ext.include_dirs = list(
+            parse_conan_build_info(conan_build_info, "includedirs")
+        ) + ext.include_dirs
+
         defines = parse_conan_build_info(conan_build_info, "defines")
         ext.define_macros = [(d, None) for d in defines] + ext.define_macros
 
