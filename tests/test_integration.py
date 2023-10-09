@@ -17,7 +17,6 @@ from uiucprescon.build.pybind11_builder import BuildPybind11Extension
 
 setup(
     name='dummy',
-    version='1.0',
     ext_modules=[
         Pybind11Extension(
             "dummy.spam",
@@ -37,6 +36,7 @@ setup(
     pyproject.write_text("""
 [project]
 name = "dummy"
+version = "1.0"
     """)
 
     conanfile = source_root / "conanfile.py"
