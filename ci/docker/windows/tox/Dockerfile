@@ -1,4 +1,5 @@
 # escape=`
+ARG PIPX_HOME=c:\pipx
 ARG VS_INSTALL_PATH="C:\BuildTools\"
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
@@ -121,6 +122,16 @@ COPY requirements/ c:/python_requirements/requirements
 RUN python -m pip install pip --upgrade ; `
     pip install wheel ; `
     pip install -r c:\python_requirements\requirements-ci.txt
+
+ARG PIPX_HOME
+ENV PIPX_HOME=${PIPX_HOME}
+ENV PIPX_BIN_DIR=${PIPX_HOME}\bin
+
+
+RUN py -3 -m pip install --no-cache-dir pipx ; `
+    py -3 -m pipx ensurepath
+RUN py -3 -m pipx install 'devpi-client<7.0'
+
 ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
 ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 WORKDIR C:/src
