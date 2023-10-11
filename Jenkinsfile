@@ -187,23 +187,31 @@ pipeline {
                                                         ''
                                                         )
                             def linuxJobs = [:]
+                            if(nodesByLabel("linux && docker").size() > 0){
+                                linuxJobs = tox.getToxTestsParallel(
+                                    envNamePrefix: 'Tox Linux',
+                                    label: 'linux && docker',
+                                    dockerfile: 'ci/docker/linux/tox/Dockerfile',
+                                    dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
+                                    dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
+                                    retry: 2
+                                )
+                            } else {
+                                echo 'No nodes with the following labels: linux && docker labels'
+                            }
                             def windowsJobs = [:]
-                            linuxJobs = tox.getToxTestsParallel(
-                                envNamePrefix: 'Tox Linux',
-                                label: 'linux && docker',
-                                dockerfile: 'ci/docker/linux/tox/Dockerfile',
-                                dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
-                                dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
-                                retry: 2
-                            )
-                            windowsJobs = tox.getToxTestsParallel(
-                                envNamePrefix: 'Tox Windows',
-                                label: 'windows && docker && x86',
-                                dockerfile: 'ci/docker/windows/tox/Dockerfile',
-                                dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE',
-                                dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
-                                retry: 2
-                            )
+                            if(nodesByLabel('windows && docker && x86').size() > 0){
+                                windowsJobs = tox.getToxTestsParallel(
+                                    envNamePrefix: 'Tox Windows',
+                                    label: 'windows && docker && x86',
+                                    dockerfile: 'ci/docker/windows/tox/Dockerfile',
+                                    dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE',
+                                    dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
+                                    retry: 2
+                                )
+                            } else {
+                                echo 'No nodes with the following labels: windows && docker && x86'
+                            }
                             parallel(linuxJobs + windowsJobs)
                         }
                     }
