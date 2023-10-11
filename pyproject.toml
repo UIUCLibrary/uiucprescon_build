@@ -17,17 +17,21 @@ dependencies = [
     'wheel',
     "cmake",
     'pybind11~=2.10.1',
-    "conan>=1.53,!=1.55.0,<2.0",
+    "conan",
     'toml'
 ]
 license = {text = "University of Illinois/NCSA Open Source License"}
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 [tool.setuptools.dynamic]
 version = {attr = "uiucprescon.build.VERSION"}
 
 [tool.setuptools]
-packages = ['uiucprescon.build']
+packages = [
+    'uiucprescon.build',
+    'uiucprescon.build.conan',
+]
+
 
 [tool.coverage.run]
 relative_files = false

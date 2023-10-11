@@ -41,7 +41,7 @@ version = "1.0"
 
     conanfile = source_root / "conanfile.py"
     conanfile.write_text("""
-from conans import ConanFile
+from conan import ConanFile
 class Dummy(ConanFile):
     requires = []
     """)

@@ -1,120 +1,29 @@
-import logging
 import os
 import re
 import subprocess
 import sys
 import shutil
 import abc
-from typing import Iterable, Any, Dict, List, Union, Optional
+from typing import Dict, List, Optional
 import setuptools
-import platform
 from distutils import ccompiler
 from pathlib import Path
 from uiucprescon.build.deps import get_win_deps
 from uiucprescon.build.compiler_info import (
     get_compiler_version,
-    get_compiler_name
 )
 import json
-from distutils.dist import Distribution
+from setuptools.dist import Distribution
 import toml
-from conans.client import conan_api, conf
-
-
-class ConanBuildInfoParser:
-    def __init__(self, fp):
-        self._fp = fp
-
-    def parse(self) -> Dict[str, List[str]]:
-        data = dict()
-        for subject_chunk in self.iter_subject_chunk():
-            subject_title = subject_chunk[0][1:-1]
-
-            data[subject_title] = subject_chunk[1:]
-        return data
-
-    def iter_subject_chunk(self) -> Iterable[Any]:
-        buffer = []
-        for line in self._fp:
-            line = line.strip()
-            if len(line) == 0:
-                continue
-            if line.startswith("[") and line.endswith("]") and len(buffer) > 0:
-                yield buffer
-                buffer.clear()
-            buffer.append(line)
-        yield buffer
-        buffer.clear()
+from uiucprescon.build.conan import conan_api
+from uiucprescon.build.conan.files import ConanBuildInfo, ConanBuildInfoParser
+__all__ = ['ConanBuildInfoParser']
 
 
 class AbsConanBuildInfo(abc.ABC):
     @abc.abstractmethod
     def parse(self, filename: str) -> Dict[str, str]:
         pass
-
-
-class ConanBuildInfoTXT(AbsConanBuildInfo):
-
-    def parse(self, filename: str) -> Dict[str, Union[str, List[str]]]:
-        with open(filename, "r") as f:
-            parser = ConanBuildInfoParser(f)
-            data = parser.parse()
-            definitions = data['defines']
-            include_paths = data['includedirs']
-            lib_paths = data['libdirs']
-            bin_paths = data['bindirs']
-            libs = data['libs']
-            names = []
-            for value in data.keys():
-                if not value.startswith("name_"):
-                    continue
-                names.append(value.replace("name_", ""))
-            # print(names)
-            libsmetadata = {}
-            for library_name in names:
-                version = data.get(f"version_{library_name}", None)
-                libsmetadata[library_name] = {
-                    "libs": data.get(f"libs_{library_name}", []),
-                    "includedirs": data.get(f"includedirs_{library_name}", []),
-                    "libdirs": data.get(f"libdirs_{library_name}", []),
-                    "bindirs": data.get(f"bindirs_{library_name}", []),
-                    "resdirs": data.get(f"resdirs_{library_name}", []),
-                    "builddirs": data.get(f"builddirs_{library_name}", []),
-                    "system_libs":
-                        data.get(f"system_libs_{library_name}", []),
-                    "defines":
-                        data.get(f"defines_{library_name}", []),
-                    "cppflags":
-                        data.get(f"cppflags_{library_name}", []),
-                    "cxxflags":
-                        data.get(f"cxxflags_{library_name}", []),
-                    "cflags": data.get(f"cflags_{library_name}", []),
-                    "sharedlinkflags":
-                        data.get(f"sharedlinkflags_{library_name}", []),
-                    "exelinkflags":
-                        data.get(f"exelinkflags_{library_name}", []),
-                    "sysroot": data.get(f"sysroot_{library_name}", []),
-                    "frameworks":
-                        data.get(f"frameworks_{library_name}", []),
-                    "frameworkdirs":
-                        data.get(f"frameworkdirs_{library_name}", []),
-                    "rootpath": data.get(f"rootpath_{library_name}", []),
-                    "name": library_name,
-                    "version": version[0] if version else None,
-                    "generatornames":
-                        data.get(f"generatornames_{library_name}", []),
-                    "generatorfilenames":
-                        data.get(f"generatorfilenames_{library_name}", []),
-                }
-        return {
-            "definitions": definitions,
-            "include_paths": list(include_paths),
-            "lib_paths": list(lib_paths),
-            "bin_paths": list(bin_paths),
-            "libs": list(libs),
-            "metadata": libsmetadata
-
-        }
 
 
 class AbsResultTester(abc.ABC):
@@ -222,7 +131,7 @@ def update_extension(extension, metadata):
     extension.define_macros = define_macros + extension.define_macros
 
 
-def update_extension2(extension, text_md):
+def update_extension2(extension, text_md: ConanBuildInfo):
     include_dirs = text_md['include_paths']
     library_dirs = text_md['lib_paths']
     define_macros = [(d, None) for d in text_md.get('definitions', [])]
@@ -271,6 +180,7 @@ class BuildConan(setuptools.Command):
         self.conan_cache = None
         self.compiler_version = None
         self.compiler_libcxx = None
+        self.conanfile = None
 
     def __init__(self, dist, **kw):
         self.install_libs = True
@@ -351,45 +261,50 @@ class BuildConan(setuptools.Command):
         if not os.path.exists(build_dir_full_path):
             self.mkpath(build_dir_full_path)
         self.announce(f"Using {conan_cache} for conan cache", 5)
-        build_deps_with_conan(
-            build_dir,
+        metadata = build_deps_with_conan(
+            conanfile=self.conanfile,
+            build_dir=build_dir,
             install_dir=os.path.abspath(install_dir),
             compiler_libcxx=self.compiler_libcxx,
             compiler_version=self.compiler_version,
             conan_options=get_conan_options(),
             conan_cache=conan_cache,
-            install_libs=self.install_libs
+            install_libs=self.install_libs,
+            announce=self.announce
+
         )
-        conaninfotext = os.path.join(build_dir, "conaninfo.txt")
-        if os.path.exists(conaninfotext):
-            with open(conaninfotext) as r:
-                self.announce(r.read(), 5)
-        build_locations = [
-            build_dir,
-            os.path.join(build_dir, "Release")
-        ]
-        conanbuildinfotext = locate_conanbuildinfo(build_locations)
-        if conanbuildinfotext is None:
-            raise AssertionError("Missing conanbuildinfo.txt")
-        metadata_strategy = ConanBuildInfoTXT()
-        text_md = metadata_strategy.parse(conanbuildinfotext)
         build_ext_cmd = self.get_finalized_command("build_ext")
         for extension in build_ext_cmd.extensions:
             if build_ext._inplace:
                 extension.runtime_library_dirs.append(
                     os.path.abspath(install_dir)
                 )
-            update_extension2(extension, text_md)
+            update_extension2(extension, metadata)
             extension.library_dirs.insert(0, install_dir)
             if sys.platform == "darwin":
                 extension.runtime_library_dirs.append("@loader_path")
             elif sys.platform == "linux":
                 if "$ORIGIN" not in extension.runtime_library_dirs:
                     extension.runtime_library_dirs.append("$ORIGIN")
-            # else:
-            #     pprint(text_md)
-            #     raise Exception(text_md)
-            # if sys.platform == "Windows":
+
+
+def _get_source_root(dist: Distribution):
+    project_files = ["pyproject.toml", "setup.py"]
+    path = dist.src_root or os.curdir
+    for project_file in project_files:
+        project_file_path = Path(path, project_file)
+        if os.path.exists(project_file_path):
+            return os.path.abspath(path)
+    return os.path.abspath(path)
+
+
+def _find_conanfile(path: str) -> Optional[str]:
+    conanfile_types = ["conanfile.py"]
+    for conanfile_type in conanfile_types:
+        conanfile = os.path.join(path, conanfile_type)
+        if os.path.exists(conanfile):
+            return conanfile
+    return None
 
 
 def build_conan(
@@ -400,7 +315,11 @@ def build_conan(
 ):
     dist = Distribution()
     dist.parse_config_files()
+
+    source_root = _get_source_root(dist)
+
     command = BuildConan(dist)
+    command.conanfile = _find_conanfile(path=source_root)
     if metadata_directory is not None:
         build_py = command.get_finalized_command("build_py")
         build_py.build_lib = wheel_directory
@@ -411,6 +330,7 @@ def build_conan(
     command.install_libs = install_libs
     build_ext_cmd = command.get_finalized_command("build_ext")
     conan_cache = None
+
     if config_settings:
         conan_cache = config_settings.get('conan_cache')
         command.conan_cache = conan_cache
@@ -454,6 +374,7 @@ def get_pyproject_toml_data():
 
 
 def build_deps_with_conan(
+        conanfile: str,
         build_dir: str,
         install_dir: str,
         compiler_libcxx: str,
@@ -462,75 +383,22 @@ def build_deps_with_conan(
         conan_options: Optional[List[str]] = None,
         debug: bool = False,
         install_libs=True,
-        build=None
+        build=None,
+        announce=None
 ):
-
-    conan = conan_api.Conan(cache_folder=os.path.abspath(conan_cache))
-    settings = []
-    logger = logging.Logger(__name__)
-    conan_profile_cache = os.path.join(build_dir, "profiles")
-    build = build or ['outdated']
-    for name, value in conf.detect.detect_defaults_settings(
-            logger,
-            conan_profile_cache
-    ):
-        settings.append(f"{name}={value}")
-    if debug is True:
-        settings.append("build_type=Debug")
-    else:
-        settings.append("build_type=Release")
-    try:
-        compiler_name = get_compiler_name()
-        settings.append(f"compiler={compiler_name}")
-        if compiler_libcxx is not None:
-            if 'compiler.libcxx=libstdc' in settings:
-                settings.remove('compiler.libcxx=libstdc')
-            settings.append(f'compiler.libcxx={compiler_libcxx}')
-        settings.append(f"compiler.version={compiler_version}")
-        if compiler_name == 'gcc':
-            pass
-        elif compiler_name == "msvc":
-            settings.append("compiler.cppstd=14")
-            settings.append("compiler.runtime=dynamic")
-        elif compiler_name == "Visual Studio":
-            settings.append("compiler.runtime=MD")
-            settings.append("compiler.toolset=v142")
-    except AttributeError:
-        print(
-            f"Unable to get compiler information "
-            f"for {platform.python_compiler()}"
-        )
-        raise
-
-    conanfile_path = os.path.abspath('.')
-    # conanfile_path = os.path.abspath(
-    #     os.path.join(os.path.dirname(__file__), "..")
-    # )
-
-    ninja = shutil.which("ninja")
-    env = []
-    if ninja:
-        env.append(f"NINJA={ninja}")
-    conan.install(
-        options=conan_options,
-        cwd=os.path.abspath(build_dir),
-        settings=settings,
-        build=build if len(build) > 0 else None,
-        path=conanfile_path,
-        env=env,
-        no_imports=not install_libs,
+    return conan_api.build_deps_with_conan(
+        conanfile,
+        build_dir,
+        install_dir,
+        compiler_libcxx,
+        compiler_version,
+        conan_cache,
+        conan_options,
+        debug,
+        install_libs,
+        build,
+        announce
     )
-    if install_libs:
-        import_manifest = os.path.join(
-            build_dir,
-            'conan_imports_manifest.txt'
-        )
-        if os.path.exists(import_manifest):
-            add_conan_imports(
-                import_manifest,
-                path=build_dir,
-                dest=install_dir
-            )
 
 
 def fixup_library(shared_library):
@@ -602,17 +470,3 @@ def add_conan_imports(import_manifest_file: str, path: str, dest: str):
         shutil.copy(file_path, dest, follow_symlinks=False)
         if file_path.is_symlink():
             continue
-
-
-def locate_conanbuildinfo(search_locations):
-    for location in search_locations:
-        conanbuildinfo = os.path.join(location, "conanbuildinfo.txt")
-        if os.path.exists(conanbuildinfo):
-            return conanbuildinfo
-
-
-def locate_conanbuildinfo_json(search_locations):
-    for location in search_locations:
-        conanbuildinfo = os.path.join(location, "conanbuildinfo.json")
-        if os.path.exists(conanbuildinfo):
-            return conanbuildinfo
