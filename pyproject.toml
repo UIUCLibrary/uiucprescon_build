@@ -46,3 +46,16 @@ include_namespace_packages= true
 [tool.coverage.paths]
 
 #[tool.coverage.report]
+
+
+[tool.pylint.'MESSAGES CONTROL']
+# docstrings linting should be handled by pydocstyle instead of pylint
+#disable = """
+#    missing-module-docstring,
+#    missing-function-docstring
+#"""
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring"
+]
