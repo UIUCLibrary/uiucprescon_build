@@ -1,3 +1,4 @@
+ARG PIPX_HOME=/pipx
 ARG CONAN_USER_HOME=/conan
 ARG PIP_DOWNLOAD_CACHE=/.cache/pip
 FROM ubuntu:22.04
@@ -29,6 +30,17 @@ RUN conan config init && \
     conan profile update settings.compiler.version=$(cc -dumpfullversion -dumpversion | grep -oE  "^([0-9]+(\.)?)([0-9]+?)") default && \
     python3 /tmp/update_conan_compiler.py ${CONAN_USER_HOME}/.conan/settings.yml gcc $(cc -dumpfullversion -dumpversion | grep -oE  "^([0-9]+(\.)?)([0-9]+?)")
 ENV CONAN_USER_HOME=${CONAN_USER_HOME}
+
+
+ARG PIPX_HOME
+ENV PIPX_HOME=${PIPX_HOME}
+ENV PIPX_BIN_DIR=${PIPX_HOME}/bin
+RUN python3 -m pip install --no-cache-dir pipx && \
+    pipx ensurepath && \
+    mkdir -p $PIPX_HOME  && chmod -R 777 $PIPX_HOME
+
+RUN PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install 'devpi-client<7.0'
+
 
 WORKDIR /src
 CMD tox --workdir /tmp/tox --recreate

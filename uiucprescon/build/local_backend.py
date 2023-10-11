@@ -28,7 +28,6 @@ def build_wheel(
             os.environ["CONAN_USER_HOME"],
             ".conan"
         )
-
     conan_libs.build_conan(
         wheel_directory,
         config_settings,

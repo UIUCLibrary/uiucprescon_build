@@ -1,9 +1,11 @@
 import platform
 import re
 import sys
-from uiucprescon.build.errors import PlatformError, ExecError
 import subprocess
 import os
+
+from uiucprescon.build.errors import PlatformError, ExecError
+
 __all__ = [
     'get_compiler_version',
     'get_compiler_name'
@@ -31,7 +33,7 @@ def get_compiler_name() -> str:
             file=sys.stderr
         )
         raise
-
+    raise ValueError("Unable to locate compiler or unknown compiler")
 
 if sys.platform == 'darwin':
     _cfg_target = None
