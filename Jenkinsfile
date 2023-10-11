@@ -131,7 +131,6 @@ pipeline {
                                     sh(label: 'combining coverage data',
                                        script: '''coverage combine
                                                   coverage xml -o ./reports/coverage-python.xml
-                                                  sed -i 's/uiucprescon\\/build\\///' reports/coverage-python.xml
                                                   '''
                                     )
                                     archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/coverage-python.xml'
