@@ -1,3 +1,88 @@
+def getMacToxTestsParallel(args = [:]){
+    def nodeLabel = args['label']
+    args.remove('label')
+
+    def envNamePrefix = args['envNamePrefix']
+    args.remove('envNamePrefix')
+
+    def retries = args.get('retry', 1)
+    if(args.containsKey('retry')){
+        args.remove('retry')
+    }
+    if(args.size() > 0){
+        error "getMacToxTestsParallel has invalid arguments ${args.keySet()}"
+    }
+
+    //    =============================================
+    def envs = [:]
+    node(nodeLabel){
+        try{
+            checkout scm
+            sh(
+                script: '''python3 -m venv venv --upgrade-deps
+                    venv/bin/pip install tox
+                    '''
+            )
+            def toxEnvs = sh(
+                    label: 'Getting Tox Environments',
+                    returnStdout: true,
+                    script: 'venv/bin/tox list -d --no-desc'
+                ).trim().split('\n')
+            toxEnvs.each({env ->
+                def requiredPythonVersion = sh(
+                    label: "Getting required python version for Tox Environment: ${env}",
+                    script: "venv/bin/tox config -e  ${env} -k py_dot_ver  | grep  'py_dot_ver =' | sed -E 's/py_dot_ver = ([0-9].[0-9]+)/\\1/g'",
+                    returnStdout: true
+                ).trim()
+                envs[env] = requiredPythonVersion
+            })
+
+
+        } finally {
+            sh 'rm -rf venv'
+        }
+    }
+    echo "Found tox environments for ${envs.keySet().join(', ')}"
+    def jobs = envs.collectEntries({ toxEnv, requiredPythonVersion ->
+        def jenkinsStageName = "${envNamePrefix} ${toxEnv}"
+        def jobNodeLabel = "${nodeLabel} && python${requiredPythonVersion}"
+        if(nodesByLabel(jobNodeLabel).size() > 0){
+            [jenkinsStageName,{
+                retry(retries){
+                    node(jobNodeLabel){
+                        try{
+                            checkout scm
+                            sh(
+                                script: '''python3 -m venv venv --upgrade-deps
+                                    venv/bin/pip install tox
+                                    '''
+                            )
+                            sh(
+                                label: 'Getting Tox Environments',
+                                script: "venv/bin/tox --list-dependencies --workdir=.tox run -e ${toxEnv}"
+                                )
+
+                        } finally {
+                            cleanWs(
+                                notFailBuild: true,
+                                deleteDirs: true,
+                                patterns: [
+                                    [pattern: '**/__pycache__/', type: 'INCLUDE'],
+                                    [pattern: 'venv/', type: 'INCLUDE'],
+                                    [pattern: '.tox/', type: 'INCLUDE'],
+                                ]
+                            )
+                        }
+                    }
+                }
+
+            }]
+        } else {
+            echo "Unable to add ${toxEnv} because no nodes with required labels: ${jobNodeLabel}"
+        }
+    })
+    return jobs
+}
 pipeline {
     agent none
     options {
@@ -187,32 +272,46 @@ pipeline {
                                                         ''
                                                         )
                             def linuxJobs = [:]
-                            if(nodesByLabel("linux && docker").size() > 0){
-                                linuxJobs = tox.getToxTestsParallel(
-                                    envNamePrefix: 'Tox Linux',
-                                    label: 'linux && docker',
-                                    dockerfile: 'ci/docker/linux/tox/Dockerfile',
-                                    dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
-                                    dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
-                                    retry: 2
-                                )
-                            } else {
-                                echo 'No nodes with the following labels: linux && docker labels'
-                            }
+
                             def windowsJobs = [:]
-                            if(nodesByLabel('windows && docker && x86').size() > 0){
-                                windowsJobs = tox.getToxTestsParallel(
-                                    envNamePrefix: 'Tox Windows',
-                                    label: 'windows && docker && x86',
-                                    dockerfile: 'ci/docker/windows/tox/Dockerfile',
-                                    dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE',
-                                    dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
-                                    retry: 2
-                                )
-                            } else {
-                                echo 'No nodes with the following labels: windows && docker && x86'
-                            }
-                            parallel(linuxJobs + windowsJobs)
+                            def macJobs = [:]
+                            parallel(
+                                'Tox Information Gathering For: Linux': {
+                                    if(nodesByLabel("linux && docker").size() > 0){
+                                        linuxJobs = tox.getToxTestsParallel(
+                                            envNamePrefix: 'Tox Linux',
+                                            label: 'linux && docker',
+                                            dockerfile: 'ci/docker/linux/tox/Dockerfile',
+                                            dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
+                                            dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
+                                            retry: 2
+                                        )
+                                    } else {
+                                        echo 'No nodes with the following labels: linux && docker labels'
+                                    }
+                                },
+                                'Tox Information Gathering For: Windows': {
+                                    if(nodesByLabel('windows && docker').size() > 0){
+                                        windowsJobs = tox.getToxTestsParallel(
+                                            envNamePrefix: 'Tox Windows',
+                                            label: 'windows && docker',
+                                            dockerfile: 'ci/docker/windows/tox/Dockerfile',
+                                            dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE',
+                                            dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
+                                            retry: 2
+                                        )
+                                    } else {
+                                        echo 'No nodes with the following labels: windows && docker && x86'
+                                    }
+                                },
+                                'Tox Information Gathering For: mac': {
+                                    if(nodesByLabel('mac && python3').size() > 0){
+                                        macJobs = macJobs + getMacToxTestsParallel(label: 'mac && python3', envNamePrefix: 'mac')
+                                    }
+                                },
+                             )
+
+                            parallel(linuxJobs + windowsJobs + macJobs)
                         }
                     }
 //                     post{
