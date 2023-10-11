@@ -4,9 +4,10 @@ import subprocess
 import sys
 import shutil
 import abc
-from typing import Dict, List, Optional
+import typing
+from typing import Dict, List, Optional, cast, Set, Tuple, Union
 import setuptools
-from distutils import ccompiler
+from distutils import ccompiler, msvccompiler
 from pathlib import Path
 from uiucprescon.build.deps import get_win_deps
 from uiucprescon.build.compiler_info import (
@@ -14,6 +15,9 @@ from uiucprescon.build.compiler_info import (
 )
 import json
 from setuptools.dist import Distribution
+from setuptools.command.build_ext import build_ext as BuildExt
+from setuptools.command.build_py import build_py as BuildPy
+from setuptools.command.build_clib import build_clib as BuildClib
 import toml
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import ConanBuildInfo, ConanBuildInfoParser
@@ -27,38 +31,44 @@ class AbsConanBuildInfo(abc.ABC):
 
 
 class AbsResultTester(abc.ABC):
-    def __init__(self, compiler=None) -> None:
+    def __init__(self, compiler: Optional[ccompiler.CCompiler] = None) -> None:
         self.compiler = compiler or ccompiler.new_compiler()
 
-    def test_shared_libs(self, libs_dir):
+    def test_shared_libs(self, libs_dir: str) -> None:
         """Make sure all shared libraries in directory are linked"""
+
         for lib in os.scandir(libs_dir):
             if not lib.name.endswith(self.compiler.shared_lib_extension):
                 continue
             self.test_binary_dependents(Path(lib.path))
 
     @abc.abstractmethod
-    def test_binary_dependents(self, file_path: Path):
+    def test_binary_dependents(self, file_path: Path) -> None:
         """Make sure shared library is linked"""
 
 
 class MacResultTester(AbsResultTester):
-    def test_binary_dependents(self, file_path: Path):
+    def test_binary_dependents(self, file_path: Path) -> None:
         otool = shutil.which("otool")
+        if otool is None:
+            raise FileNotFoundError('otool')
         self.compiler.spawn([otool, '-L', str(file_path.resolve())])
 
 
 class WindowsResultTester(AbsResultTester):
-    def test_binary_dependents(self, file_path: Path):
-        self.compiler.initialize()
+    def test_binary_dependents(self, file_path: Path) -> None:
+        compiler = cast(msvccompiler.MSVCCompiler, self.compiler)
+        compiler.initialize()
 
         deps = get_win_deps(
             str(file_path.resolve()),
             output_file=f"{file_path.stem}.depends",
-            compiler=self.compiler
+            compiler=compiler
         )
 
         system_path = os.getenv('PATH')
+        if system_path is None:
+            raise ValueError('PATH variable not set')
         for dep in deps:
             print(f"{file_path} requires {dep}")
             locations = list(filter(os.path.exists, system_path.split(";")))
@@ -75,12 +85,17 @@ class WindowsResultTester(AbsResultTester):
 class LinuxResultTester(AbsResultTester):
     def test_binary_dependents(self, file_path: Path):
         ldd = shutil.which("ldd")
+        if ldd is None:
+            raise FileNotFoundError("ldd not found")
         self.compiler.spawn([ldd, str(file_path.resolve())])
 
 
 class CompilerInfoAdder:
 
-    def __init__(self, build_ext_cmd) -> None:
+    def __init__(
+            self,
+            build_ext_cmd: setuptools.command.build_ext.build_ext
+    ) -> None:
         super().__init__()
         self._build_ext_cmd = build_ext_cmd
         if build_ext_cmd.compiler is None:
@@ -88,20 +103,21 @@ class CompilerInfoAdder:
         else:
             self._place_to_add = build_ext_cmd.compiler
 
-    def add_libs(self, libs: List[str]):
-        extension_deps = set()
+    def add_libs(self, libs: List[str]) -> None:
+        extension_deps: Set[str] = set()
         for lib in reversed(libs):
             if lib not in self._place_to_add.libraries and \
                     lib not in extension_deps:
+                extension_deps.add(lib)
                 self._place_to_add.libraries.insert(0, lib)
 
-    def add_lib_dirs(self, lib_dirs: List[str]):
+    def add_lib_dirs(self, lib_dirs: List[str]) -> None:
         for path in reversed(lib_dirs):
             assert os.path.exists(path)
             if path not in self._place_to_add.library_dirs:
                 self._place_to_add.library_dirs.insert(0, path)
 
-    def add_include_dirs(self, include_dirs: List[str]):
+    def add_include_dirs(self, include_dirs: List[str]) -> None:
         for path in reversed(include_dirs):
             if path not in self._place_to_add.include_dirs:
                 self._place_to_add.include_dirs.insert(0, path)
@@ -109,11 +125,29 @@ class CompilerInfoAdder:
                 self._place_to_add.compiler.include_dirs.insert(0, path)
 
 
-def update_extension(extension, metadata):
-    updated_libs = []
-    include_dirs = []
-    library_dirs = []
-    define_macros = []
+class ConanBuildMetadata:
+    def __init__(self, filename: str) -> None:
+        super().__init__()
+        self.filename = filename
+        with open(self.filename) as f:
+            self._data = json.loads(f.read())
+
+    def deps(self) -> List[Dict[str, str]]:
+        return [a['name'] for a in self._data['dependencies']]
+
+    def dep(self, dep: str) -> Dict[str, str]:
+        deps = self._data['dependencies']
+        return [d for d in deps if d['name'] == dep][0]
+
+
+def update_extension(
+        extension: setuptools.extension.Extension,
+        metadata: ConanBuildMetadata
+) -> None:
+    updated_libs: List[str] = []
+    include_dirs: List[str] = []
+    library_dirs: List[str] = []
+    define_macros: List[Tuple[str, Union[str, None]]] = []
     for extension_lib in extension.libraries:
         if extension_lib in metadata.deps():
             dep_metadata = metadata.dep(extension_lib)
@@ -131,7 +165,10 @@ def update_extension(extension, metadata):
     extension.define_macros = define_macros + extension.define_macros
 
 
-def update_extension2(extension, text_md: ConanBuildInfo):
+def update_extension2(
+        extension: setuptools.extension.Extension,
+        text_md: ConanBuildInfo
+) -> None:
     include_dirs = text_md['include_paths']
     library_dirs = text_md['lib_paths']
     define_macros = [(d, None) for d in text_md.get('definitions', [])]
@@ -155,7 +192,7 @@ def update_extension2(extension, text_md: ConanBuildInfo):
     extension.define_macros = define_macros + extension.define_macros
 
 
-def get_conan_options():
+def get_conan_options() -> List[str]:
     pyproject_toml_data = get_pyproject_toml_data()
     if 'localbuilder' not in pyproject_toml_data:
         return []
@@ -176,20 +213,21 @@ class BuildConan(setuptools.Command):
 
     description = "Get the required dependencies from a Conan package manager"
 
-    def initialize_options(self):
-        self.conan_cache = None
-        self.compiler_version = None
-        self.compiler_libcxx = None
-        self.conanfile = None
+    def initialize_options(self) -> None:
+        self.conan_cache: Optional[str] = None
+        self.compiler_version: Optional[str] = None
+        self.compiler_libcxx: Optional[str] = None
+        self.conanfile: Optional[str] = None
 
-    def __init__(self, dist, **kw):
+    def __init__(self, dist: setuptools.dist.Distribution, **kw: str) -> None:
         self.install_libs = True
         self.build_libs = ['outdated']
         super().__init__(dist, **kw)
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         if self.conan_cache is None:
-            build_ext_cmd = self.get_finalized_command("build_ext")
+            build_ext_cmd =\
+                cast(BuildExt, self.get_finalized_command("build_ext"))
             build_dir = build_ext_cmd.build_temp
 
             self.conan_cache = \
@@ -203,7 +241,7 @@ class BuildConan(setuptools.Command):
             self.compiler_version = \
                 os.getenv("CONAN_COMPILER_VERSION", get_compiler_version())
 
-    def getConanBuildInfo(self, root_dir):
+    def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
         for root, dirs, files in os.walk(root_dir):
             for f in files:
                 if f == "conanbuildinfo.json":
@@ -211,7 +249,7 @@ class BuildConan(setuptools.Command):
         return None
 
     def add_deps_to_compiler(self, metadata) -> None:
-        build_ext_cmd = self.get_finalized_command("build_ext")
+        build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
         compiler_adder = CompilerInfoAdder(build_ext_cmd)
 
         include_dirs = metadata['include_paths']
@@ -236,15 +274,18 @@ class BuildConan(setuptools.Command):
                 if lib not in extension.libraries:
                     extension.libraries.append(lib)
 
-    def run(self):
+    def run(self) -> None:
 
-        build_clib = self.get_finalized_command("build_clib")
-        build_ext = self.get_finalized_command("build_ext")
+        build_clib =\
+            cast(BuildClib, self.get_finalized_command("build_clib"))
+
+        build_ext = cast(BuildExt, self.get_finalized_command("build_ext"))
         if self.install_libs:
             if build_ext._inplace:
                 install_dir = os.path.abspath(build_ext.build_temp)
             else:
-                build_py = self.get_finalized_command("build_py")
+                build_py =\
+                    cast(BuildPy, self.get_finalized_command("build_py"))
                 install_dir = os.path.abspath(
                     os.path.join(
                         build_py.build_lib,
@@ -255,7 +296,7 @@ class BuildConan(setuptools.Command):
         build_dir = os.path.join(build_clib.build_temp, "conan")
         build_dir_full_path = os.path.abspath(build_dir)
         conan_cache = self.conan_cache
-        if not os.path.exists(conan_cache):
+        if conan_cache and not os.path.exists(conan_cache):
             self.mkpath(conan_cache)
             self.announce(f"Created {conan_cache} for conan cache", 5)
         if not os.path.exists(build_dir_full_path):
@@ -273,7 +314,7 @@ class BuildConan(setuptools.Command):
             announce=self.announce
 
         )
-        build_ext_cmd = self.get_finalized_command("build_ext")
+        build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
         for extension in build_ext_cmd.extensions:
             if build_ext._inplace:
                 extension.runtime_library_dirs.append(
@@ -288,7 +329,7 @@ class BuildConan(setuptools.Command):
                     extension.runtime_library_dirs.append("$ORIGIN")
 
 
-def _get_source_root(dist: Distribution):
+def _get_source_root(dist: Distribution) -> str:
     project_files = ["pyproject.toml", "setup.py"]
     path = dist.src_root or os.curdir
     for project_file in project_files:
@@ -308,11 +349,13 @@ def _find_conanfile(path: str) -> Optional[str]:
 
 
 def build_conan(
-        wheel_directory,
-        config_settings=None,
-        metadata_directory=None,
-        install_libs=True
-):
+        wheel_directory: str,
+        config_settings: Optional[
+            Dict[str, Union[str, List[str], None]]
+        ] = None,
+        metadata_directory: Optional[str] = None,
+        install_libs: bool = True
+) -> None:
     dist = Distribution()
     dist.parse_config_files()
 
@@ -321,14 +364,17 @@ def build_conan(
     command = BuildConan(dist)
     command.conanfile = _find_conanfile(path=source_root)
     if metadata_directory is not None:
-        build_py = command.get_finalized_command("build_py")
+        build_py = cast(BuildPy, command.get_finalized_command("build_py"))
         build_py.build_lib = wheel_directory
-        build_ext = command.get_finalized_command("build_ext")
+
+        build_ext = cast(BuildExt, command.get_finalized_command("build_ext"))
         build_ext.build_temp = wheel_directory
-        build_clib = command.get_finalized_command("build_clib")
+
+        build_clib =\
+            cast(BuildClib, command.get_finalized_command("build_clib"))
         build_clib.build_temp = wheel_directory
+
     command.install_libs = install_libs
-    build_ext_cmd = command.get_finalized_command("build_ext")
     conan_cache = None
 
     if config_settings:
@@ -345,28 +391,18 @@ def build_conan(
             conan_cache = os.path.join(conan_home, ".conan")
 
     if conan_cache is None:
-        os.path.join(build_ext_cmd.build_temp, ".conan")
+        os.path.join(
+            cast(
+                BuildExt, command.get_finalized_command("build_ext")
+            ).build_temp,
+            ".conan"
+        )
 
     command.finalize_options()
     command.run()
 
 
-class ConanBuildMetadata:
-    def __init__(self, filename) -> None:
-        super().__init__()
-        self.filename = filename
-        with open(self.filename) as f:
-            self._data = json.loads(f.read())
-
-    def deps(self):
-        return [a['name'] for a in self._data['dependencies']]
-
-    def dep(self, dep: str):
-        deps = self._data['dependencies']
-        return [d for d in deps if d['name'] == dep][0]
-
-
-def get_pyproject_toml_data():
+def get_pyproject_toml_data() -> Dict[str, typing.Any]:
 
     pyproj_toml = Path('pyproject.toml')
     with open(pyproj_toml) as f:
@@ -401,7 +437,7 @@ def build_deps_with_conan(
     )
 
 
-def fixup_library(shared_library):
+def fixup_library(shared_library: str) -> None:
     if sys.platform == "darwin":
         otool = shutil.which("otool")
         install_name_tool = shutil.which('install_name_tool')
@@ -411,6 +447,8 @@ def fixup_library(shared_library):
                 "Make sure that otool and install_name_tool are on "
                 "the PATH."
             )
+        otool = cast(str, otool)
+        install_name_tool = cast(str, install_name_tool)
         dylib_regex = re.compile(
             r'^(?P<path>([@a-zA-Z./_])+)'
             r'/'
@@ -430,12 +468,14 @@ def fixup_library(shared_library):
             ):
                 continue
             value = dylib_regex.match(line.strip())
+            if value is None:
+                raise ValueError(f"unable to parse {line}")
             try:
                 original_path = value.group("path")
                 library_name = value.group("file").strip()
             except AttributeError as e:
                 raise ValueError(f"unable to parse {line}") from e
-            command = [
+            command: List[str] = [
                 install_name_tool,
                 "-change",
                 os.path.join(original_path, library_name),
@@ -445,8 +485,8 @@ def fixup_library(shared_library):
             subprocess.check_call(command)
 
 
-def add_conan_imports(import_manifest_file: str, path: str, dest: str):
-    libs = []
+def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
+    libs: List[str] = []
     with open(import_manifest_file, "r", encoding="utf8") as f:
         for line in f.readlines():
             if ":" not in line:

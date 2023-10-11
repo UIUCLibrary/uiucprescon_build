@@ -17,30 +17,32 @@ def get_compiler_name() -> str:
         '^(GCC|Clang|MSVC|MSC)',
         platform.python_compiler()
     )
-    try:
-        if "Clang" in groups[1]:
-            if platform.system() == "Darwin":
-                return 'apple-clang'
-        elif "GCC" in groups[1]:
-            return 'gcc'
-        elif groups[1] in ['MSVC', 'MSC']:
-            return 'Visual Studio'
-        else:
-            return groups[1]
-    except TypeError:
-        print(
-            f"python compiler = {platform.python_compiler()}",
-            file=sys.stderr
-        )
-        raise
+    if groups is not None:
+        try:
+            if "Clang" in groups[1]:
+                if platform.system() == "Darwin":
+                    return 'apple-clang'
+            elif "GCC" in groups[1]:
+                return 'gcc'
+            elif groups[1] in ['MSVC', 'MSC']:
+                return 'Visual Studio'
+            else:
+                return groups[1]
+        except TypeError:
+            print(
+                f"python compiler = {platform.python_compiler()}",
+                file=sys.stderr
+            )
+            raise
     raise ValueError("Unable to locate compiler or unknown compiler")
+
 
 if sys.platform == 'darwin':
     _cfg_target = None
     _cfg_target_split = None
 
 
-def get_visual_studio_version():
+def get_visual_studio_version() -> str:
     import winreg
     possible_versions = [
         "8.0", "9.0", "10.0", "11.0", "12.0", "14.0", "15.0", "16.0"
@@ -64,7 +66,7 @@ def get_visual_studio_version():
     return sorted_values[-1].split(".")[0]
 
 
-def get_clang_version():
+def get_clang_version() -> str:
     cmd = ['cc', '--version']
 
     env = None
@@ -101,6 +103,8 @@ def get_clang_version():
         exitcode = proc.returncode
         clang_version_regex = re.compile(
             r'(?<=Apple clang version )((\d+[.]){1,2}\d+)')
+        if proc.stdout is None:
+            raise ValueError("unable to read standard out of process")
         compiler_response = proc.stdout.read().decode('utf-8')
         try:
             env_version = clang_version_regex.search(
@@ -121,12 +125,14 @@ def get_clang_version():
         raise ExecError("command %r failed: %s" % (cmd, exc.args[-1])) from exc
 
 
-def get_gcc_version():
+def get_gcc_version() -> str:
     cmd = ['cc', '-dumpfullversion', '-dumpversion']
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         proc.wait()
         exitcode = proc.returncode
+        if proc.stdout is None:
+            raise ValueError("unable to read standard out of process")
         compiler_response = proc.stdout.read().decode('utf-8')
         if exitcode:
             raise ExecError(f"command {cmd} failed with exit code {exitcode}")
@@ -140,7 +146,7 @@ def get_gcc_version():
         raise ExecError("command %r failed: %s" % (cmd, exc.args[-1])) from exc
 
 
-def get_compiler_version():
+def get_compiler_version() -> str:
     """
     Examples of compiler data:
         GCC 10.2.1 20210110

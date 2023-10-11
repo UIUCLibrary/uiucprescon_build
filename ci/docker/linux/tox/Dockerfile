@@ -1,5 +1,4 @@
 ARG PIPX_HOME=/pipx
-ARG CONAN_USER_HOME=/conan
 ARG PIP_DOWNLOAD_CACHE=/.cache/pip
 FROM ubuntu:22.04
 COPY ci/docker/linux/tox/apt-packages.txt /tmp/
@@ -22,15 +21,6 @@ ARG PIP_DOWNLOAD_CACHE
 RUN mkdir -p ${PIP_DOWNLOAD_CACHE} && \
     chmod -R 777 ${PIP_DOWNLOAD_CACHE}
 ENV PIP_DOWNLOAD_CACHE=${PIP_DOWNLOAD_CACHE}
-
-COPY ci/docker/linux/shared/update_conan_compiler.py  /tmp/update_conan_compiler.py
-ARG CONAN_USER_HOME
-RUN conan config init && \
-    conan config set general.revisions_enabled=1 && \
-    conan profile update settings.compiler.version=$(cc -dumpfullversion -dumpversion | grep -oE  "^([0-9]+(\.)?)([0-9]+?)") default && \
-    python3 /tmp/update_conan_compiler.py ${CONAN_USER_HOME}/.conan/settings.yml gcc $(cc -dumpfullversion -dumpversion | grep -oE  "^([0-9]+(\.)?)([0-9]+?)")
-ENV CONAN_USER_HOME=${CONAN_USER_HOME}
-
 
 ARG PIPX_HOME
 ENV PIPX_HOME=${PIPX_HOME}

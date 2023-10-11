@@ -1,11 +1,20 @@
 import abc
 import sys
-from typing import Optional
+from typing import Optional, cast, List, Set
 import pybind11
 from pybind11.setup_helpers import Pybind11Extension, build_ext
-from . import conan_libs
+from uiucprescon.build.utils import locate_file
+from setuptools.command.build_py import build_py as BuildPy
+from setuptools.extension import Extension
+from setuptools.command.build_clib import build_clib as BuildClib
 from distutils.ccompiler import CCompiler
 import os
+
+
+class AbsFindLibrary(abc.ABC):
+    @abc.abstractmethod
+    def locate(self, library_name: str) -> Optional[str]:
+        """Abstract method for locating a library."""
 
 
 class BuildPybind11Extension(build_ext):
@@ -13,21 +22,25 @@ class BuildPybind11Extension(build_ext):
         ('cxx-standard=', None, "C++ version to use. Default:11")
     ]
 
-    def initialize_options(self):
-        super().initialize_options()
-
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         super().finalize_options()
 
         # self.inplace keeps getting reset by the time it is needed so
         # capture it here
         self._inplace = self.inplace
 
-    def find_deps(self, lib, search_paths=None):
+    def find_deps(
+            self,
+            lib: str,
+            search_paths: Optional[List[str]] = None
+    ) -> Optional[str]:
         search_paths = search_paths or os.environ['path'].split(";")
 
         search_paths.append(
-            self.get_finalized_command("build_clib").build_temp
+            cast(
+                BuildClib,
+                self.get_finalized_command("build_clib")
+            ).build_temp
         )
 
         for path in search_paths:
@@ -37,8 +50,13 @@ class BuildPybind11Extension(build_ext):
             for f in os.scandir(path):
                 if f.name.lower() == lib.lower():
                     return f.path
+        return None
 
-    def find_missing_libraries(self, ext, strategies=None):
+    def find_missing_libraries(
+            self,
+            ext: Extension,
+            strategies: Optional[List[AbsFindLibrary]] = None
+    ) -> List[str]:
         strategies = strategies or [
             UseSetuptoolsCompilerFileLibrary(
                 compiler=self.compiler,
@@ -46,14 +64,17 @@ class BuildPybind11Extension(build_ext):
             ),
         ]
         conanfileinfo_locations = [
-            self.get_finalized_command("build_clib").build_temp
+            cast(
+                BuildClib,
+                self.get_finalized_command("build_clib")
+            ).build_temp
         ]
         conan_info_dir = os.environ.get('CONAN_BUILD_INFO_DIR')
         if conan_info_dir:
             conanfileinfo_locations.insert(0, conan_info_dir)
 
         conanbuildinfo =\
-            conan_libs.locate_conanbuildinfo(conanfileinfo_locations)
+            locate_file('conanbuildinfo.txt', conanfileinfo_locations)
 
         if conanbuildinfo:
             strategies.insert(
@@ -68,7 +89,7 @@ class BuildPybind11Extension(build_ext):
                     break
         return list(missing_libs)
 
-    def build_extension(self, ext: Pybind11Extension):
+    def build_extension(self, ext: Pybind11Extension) -> None:
         self._add_conan_libs_to_ext(ext)
         self.compiler: CCompiler
         super().build_extension(ext)
@@ -85,9 +106,12 @@ class BuildPybind11Extension(build_ext):
     def get_pybind11_include_path(self) -> str:
         return pybind11.get_include()
 
-    def _add_conan_libs_to_ext(self, ext: Pybind11Extension):
+    def _add_conan_libs_to_ext(self, ext: Pybind11Extension) -> None:
         conan_build_info = os.path.join(
-            self.get_finalized_command("build_clib").build_temp,
+            cast(
+                BuildPy,
+                self.get_finalized_command("build_clib"),
+            ).build_temp,
             "conanbuildinfo.txt"
         )
         if not os.path.exists(conan_build_info):
@@ -99,7 +123,7 @@ class BuildPybind11Extension(build_ext):
 
         lib_output = os.path.abspath(os.path.join(self.build_temp, "lib"))
 
-        build_py = self.get_finalized_command("build_py")
+        build_py = cast(BuildPy, self.get_finalized_command("build_py"))
         package_path = build_py.get_package_dir(build_py.packages[0])
         if os.path.exists(lib_output) and not self._inplace:
             dest = os.path.join(self.build_lib, package_path)
@@ -124,28 +148,22 @@ class BuildPybind11Extension(build_ext):
         ext.define_macros = [(d, None) for d in defines] + ext.define_macros
 
 
-class AbsFindLibrary(abc.ABC):
-    @abc.abstractmethod
-    def locate(self, library_name) -> Optional[str]:
-        """Abstract method for locating a library."""
-
-
 class UseSetuptoolsCompilerFileLibrary(AbsFindLibrary):
-    def __init__(self, compiler, dirs):
+    def __init__(self, compiler: CCompiler, dirs: List[str]) -> None:
         self.compiler = compiler
         self.dirs = dirs
 
-    def locate(self, library_name) -> Optional[str]:
+    def locate(self, library_name: str) -> Optional[str]:
         return self.compiler.find_library_file(self.dirs, library_name)
 
 
 class UseConanFileBuildInfo(AbsFindLibrary):
 
-    def __init__(self, path) -> None:
+    def __init__(self, path: str) -> None:
         super().__init__()
         self.path = path
 
-    def locate(self, library_name) -> Optional[str]:
+    def locate(self, library_name: str) -> Optional[str]:
         conan_build_info = os.path.join(self.path, "conanbuildinfo.txt")
         if not os.path.exists(conan_build_info):
             return None
@@ -153,7 +171,10 @@ class UseConanFileBuildInfo(AbsFindLibrary):
         return library_name if library_name in libs else None
 
 
-def parse_conan_build_info(conan_build_info_file, section):
+def parse_conan_build_info(
+        conan_build_info_file: str,
+        section: str
+) -> Set[str]:
     items = set()
     with open(conan_build_info_file, encoding="utf-8") as f:
         found = False
