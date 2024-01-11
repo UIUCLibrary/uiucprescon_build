@@ -10,15 +10,11 @@ from typing import (
 )
 import os
 try:
-    from conans.client.cache.cache import ClientCache
-    from conans.model.settings import Settings
     from conan.api.conan_api import ConanAPI
-    from conans.client.conf import default_settings_yml
 except ImportError as error:
     raise ImportError("conan 2.0 api not found.") from error
 
 import dataclasses
-import yaml
 if TYPE_CHECKING:
     from uiucprescon.build.conan_libs import ConanBuildInfo
 
@@ -63,27 +59,15 @@ def build_deps_with_conan(
             os.path.abspath(conan_cache) if conan_cache is not None else None
         )
     remotes = conan_api.remotes.list()
-
     profile_host = conan_api.profiles.detect()
-    settings = Settings(yaml.safe_load(default_settings_yml))
+    profile_host.process_settings(conan_api.config.settings_yml)
 
-    profile_host.process_settings(settings)
     profile_build = conan_api.profiles.detect()
-    profile_build.process_settings(settings)
+    profile_build.process_settings(conan_api.config.settings_yml)
 
-    deps_graph = conan_api.graph.load_graph_consumer(
-        path=conanfile,
-        name=None,
-        version=None,
-        user=None,
-        channel=None,
-        profile_host=profile_host,
-        profile_build=profile_build,
-        lockfile=None,
-        remotes=remotes,
-        update=False,
-        is_build_require=False
-    )
+    root_node = conan_api.graph._load_root_consumer_conanfile(conanfile, profile_host, profile_build)
+    deps_graph = conan_api.graph.load_graph(root_node, profile_build=profile_build, profile_host=profile_host)
+
     conan_api.graph.analyze_binaries(
         deps_graph,
         build_mode=["missing"],
