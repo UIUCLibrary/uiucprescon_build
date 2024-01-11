@@ -175,6 +175,9 @@ pipeline {
                                         always {
                                             junit 'reports/pytest.xml'
                                         }
+                                        failure{
+                                            sh('pip list')
+                                        }
                                     }
                                 }
                                 stage('Pylint'){

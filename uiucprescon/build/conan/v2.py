@@ -1,7 +1,19 @@
 from __future__ import annotations
-from typing import List, Optional, TYPE_CHECKING
-from conans.client.cache.cache import ClientCache
-from conan.api.conan_api import ConanAPI
+from typing import (
+    AnyStr,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    TYPE_CHECKING,
+    TypedDict,
+)
+import os
+try:
+    from conan.api.conan_api import ConanAPI
+except ImportError as error:
+    raise ImportError("conan 2.0 api not found.") from error
+
 import dataclasses
 if TYPE_CHECKING:
     from uiucprescon.build.conan_libs import ConanBuildInfo
@@ -20,6 +32,14 @@ class ProfileArg:
     profile_build: Optional[str] = None
 
 
+class DependencyMetadata(TypedDict, total=False):
+    includedirs: List[str]
+    libdirs: List[str]
+    bindirs: List[str]
+    defines: List[str]
+    libs: List[str]
+
+
 def build_deps_with_conan(
         conanfile: str,
         build_dir: str,
@@ -29,45 +49,40 @@ def build_deps_with_conan(
         conan_cache: Optional[str] = None,
         conan_options: Optional[List[str]] = None,
         debug: bool = False,
-        install_libs=True,
+        install_libs: bool = True,
         build=None,
-        announce=None
+        announce: Optional[Callable[[AnyStr, int], None]] = None
 ) -> ConanBuildInfo:
-    def run(conan_path):
-        conan_api = ConanAPI()
-        remotes = conan_api.remotes.list()
-        profile_host = conan_api.profiles.detect()
-        profile_host.process_settings(ClientCache(conan_path))
-
-        profile_build = conan_api.profiles.detect()
-        profile_build.process_settings(ClientCache(conan_path))
-
-        deps_graph = conan_api.graph.load_graph_consumer(
-            path=conanfile,
-            name="CompressorRecipe",
-            version="123",
-            user="args.user",
-            channel="args.channel",
-            profile_host=profile_host,
-            profile_build=profile_build,
-            lockfile=None,
-            remotes=remotes,
-            update=False,
-            is_build_require=False
+    conan_path = conan_cache
+    conan_api =\
+        ConanAPI(
+            os.path.abspath(conan_cache) if conan_cache is not None else None
         )
-        conan_api.graph.analyze_binaries(
-            deps_graph,
-            build_mode=["missing"],
-            remotes=remotes
-        )
-        conan_api.install.install_binaries(deps_graph, remotes)
-        data = {}
-        for dep in deps_graph.root.dependencies:
-            conan_file = dep.dst.conanfile
-            data = {**data, **conan_file.cpp_info.serialize()}
-        return data
-    data = run(conan_cache)
+    remotes = conan_api.remotes.list()
+    profile_host = conan_api.profiles.detect()
+    profile_host.process_settings(conan_api.config.settings_yml)
 
+    profile_build = conan_api.profiles.detect()
+    profile_build.process_settings(conan_api.config.settings_yml)
+
+    root_node = conan_api.graph._load_root_consumer_conanfile(conanfile, profile_host, profile_build)
+    deps_graph = conan_api.graph.load_graph(root_node, profile_build=profile_build, profile_host=profile_host)
+
+    conan_api.graph.analyze_binaries(
+        deps_graph,
+        build_mode=["missing"],
+        remotes=remotes
+    )
+    conan_api.install.install_binaries(deps_graph, remotes)
+    data: Dict[str, DependencyMetadata] = {}
+    for dep in deps_graph.root.dependencies:
+        conan_file = dep.dst.conanfile
+        data = {**data, **conan_file.cpp_info.serialize()}
+
+    return extract_metadata(data)
+
+
+def extract_metadata(data: Dict[str, DependencyMetadata]) -> ConanBuildInfo:
     definitions = []
     libs = []
     include_paths = []

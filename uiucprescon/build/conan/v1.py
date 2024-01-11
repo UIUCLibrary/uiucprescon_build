@@ -13,9 +13,11 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, cast
+
 from conans.client import conan_api, conf   # pylint: disable=import-error
 
+from uiucprescon.build.utils import locate_file
 from uiucprescon.build.compiler_info import (  # pylint: disable=import-error
     get_compiler_name
 )
@@ -38,7 +40,9 @@ def build_deps_with_conan(
         announce=None
 ):
 
-    conan = conan_api.Conan(cache_folder=os.path.abspath(conan_cache))
+    conan = conan_api.Conan(
+        cache_folder=os.path.abspath(conan_cache) if conan_cache else None
+    )
     settings = []
     logger = logging.Logger(__name__)
     conan_profile_cache = os.path.join(build_dir, "profiles")
@@ -76,17 +80,19 @@ def build_deps_with_conan(
         raise
 
     conanfile_path = os.path.abspath('.')
-    # conanfile_path = os.path.abspath(
-    #     os.path.join(os.path.dirname(__file__), "..")
-    # )
 
     ninja = shutil.which("ninja")
     env = []
     if ninja:
         env.append(f"NINJA={ninja}")
 
-    profile_host = conan_api.ProfileData(profiles=None, settings=settings, options=None,
-                               env=env, conf=None)
+    profile_host = conan_api.ProfileData(
+        profiles=None,
+        settings=settings,
+        options=None,
+        env=env,
+        conf=None
+    )
     conan.install(
         options=conan_options,
         cwd=os.path.abspath(build_dir),
@@ -97,6 +103,7 @@ def build_deps_with_conan(
         env=env,
         no_imports=not install_libs,
     )
+
     if install_libs:
         import_manifest = os.path.join(
             build_dir,
@@ -117,14 +124,16 @@ def build_deps_with_conan(
         build_dir,
         os.path.join(build_dir, "Release")
     ]
-    conanbuildinfotext = locate_conanbuildinfo(build_locations)
+    conanbuildinfotext =\
+        locate_file("conanbuildinfo.txt", build_locations)
+
     if conanbuildinfotext is None:
         raise AssertionError("Missing conanbuildinfo.txt")
     metadata_strategy = ConanBuildInfoTXT()
     metadata_strategy.parse(conanbuildinfotext)
 
 
-def fixup_library(shared_library):
+def fixup_library(shared_library: str) -> None:
     if sys.platform == "darwin":
         otool = shutil.which("otool")
         install_name_tool = shutil.which('install_name_tool')
@@ -134,6 +143,13 @@ def fixup_library(shared_library):
                 "Make sure that otool and install_name_tool are on "
                 "the PATH."
             )
+
+        # Hack: Casting the following to strings to help MyPy which doesn't
+        #  currently (as of mypy version 1.6.0) understand that if they any
+        #  were None, they'd raise a FileNotFound error.
+        otool = cast(str, otool)
+        install_name_tool = cast(str, install_name_tool)
+
         dylib_regex = re.compile(
             r'^(?P<path>([@a-zA-Z./_])+)'
             r'/'
@@ -153,11 +169,15 @@ def fixup_library(shared_library):
             ):
                 continue
             value = dylib_regex.match(line.strip())
-            try:
-                original_path = value.group("path")
-                library_name = value.group("file").strip()
-            except AttributeError as e:
-                raise ValueError(f"unable to parse {line}") from e
+            if value:
+                try:
+                    original_path = value.group("path")
+                    library_name = value["file"].strip()
+                except AttributeError as e:
+                    raise ValueError(f"unable to parse {line}") from e
+            else:
+                raise ValueError(f"unable to parse {line}")
+
             command = [
                 install_name_tool,
                 "-change",
@@ -168,7 +188,7 @@ def fixup_library(shared_library):
             subprocess.check_call(command)
 
 
-def add_conan_imports(import_manifest_file: str, path: str, dest: str):
+def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
     libs = []
     with open(import_manifest_file, "r", encoding="utf8") as f:
         for line in f.readlines():
@@ -193,19 +213,3 @@ def add_conan_imports(import_manifest_file: str, path: str, dest: str):
         shutil.copy(file_path, dest, follow_symlinks=False)
         if file_path.is_symlink():
             continue
-
-
-def locate_conanbuildinfo(search_locations):
-    for location in search_locations:
-        conanbuildinfo = os.path.join(location, "conanbuildinfo.txt")
-        if os.path.exists(conanbuildinfo):
-            return conanbuildinfo
-    return None
-
-
-def locate_conanbuildinfo_json(search_locations):
-    for location in search_locations:
-        conanbuildinfo = os.path.join(location, "conanbuildinfo.json")
-        if os.path.exists(conanbuildinfo):
-            return conanbuildinfo
-    return None

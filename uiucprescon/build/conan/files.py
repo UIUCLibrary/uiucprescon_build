@@ -1,9 +1,10 @@
-from typing import List, Dict, TypedDict, Iterable, Any
+import io
+from typing import List, Dict, TypedDict, Iterable, Optional
 import abc
-
-
+import warnings
+from uiucprescon.build.utils import locate_file
 class ConanBuildInfoParser:
-    def __init__(self, fp):
+    def __init__(self, fp: io.TextIOWrapper) -> None:
         self._fp = fp
 
     def parse(self) -> Dict[str, List[str]]:
@@ -14,13 +15,13 @@ class ConanBuildInfoParser:
             data[subject_title] = subject_chunk[1:]
         return data
 
-    def iter_subject_chunk(self) -> Iterable[Any]:
-        buffer = []
+    def iter_subject_chunk(self) -> Iterable[List[str]]:
+        buffer: List[str] = []
         for line in self._fp:
             line = line.strip()
             if len(line) == 0:
                 continue
-            if line.startswith("[") and line.endswith("]") and len(buffer) > 0:
+            if line.startswith("[") and line.endswith("]") and buffer:
                 yield buffer
                 buffer.clear()
             buffer.append(line)
@@ -46,16 +47,10 @@ class ConanLibraryMetadata(TypedDict):
     frameworks: List[str]
     frameworkdirs: List[str]
     rootpath: List[str]
-    name: List[str]
-    version: List[str]
+    name: str
+    version: Optional[str]
     generatornames: List[str]
     generatorfilenames: List[str]
-
-
-class AbsConanBuildInfo(abc.ABC):
-    @abc.abstractmethod
-    def parse(self, filename: str) -> Dict[str, str]:
-        pass
 
 
 class ConanBuildInfo(TypedDict):
@@ -67,10 +62,15 @@ class ConanBuildInfo(TypedDict):
     metadata: Dict[str, ConanLibraryMetadata]
 
 
+class AbsConanBuildInfo(abc.ABC):
+    @abc.abstractmethod
+    def parse(self, filename: str) -> ConanBuildInfo:
+        pass
+
+
 class ConanBuildInfoTXT(AbsConanBuildInfo):
 
     def parse(self, filename: str) -> ConanBuildInfo:
-        # def parse(self, filename: str) -> Dict[str, Union[str, List[str]]]:
         with open(filename, "r", encoding="utf-8") as f:
             parser = ConanBuildInfoParser(f)
             data = parser.parse()
@@ -130,3 +130,16 @@ class ConanBuildInfoTXT(AbsConanBuildInfo):
             "metadata": libsmetadata
 
         }
+def locate_conanbuildinfo(search_locations: List[str]) -> Optional[str]:
+    warnings.warn(
+        message="use uiucprescon.build.utils.locate_file() instead",
+        category=DeprecationWarning
+    )
+    return locate_file("conanbuildinfo.txt", search_locations)
+
+def locate_conanbuildinfo_json(search_locations: List[str]) -> Optional[str]:
+    warnings.warn(
+        message="use uiucprescon.build.utils.locate_file() instead",
+        category=DeprecationWarning
+    )
+    return locate_file("conanbuildinfo.json", search_locations)
