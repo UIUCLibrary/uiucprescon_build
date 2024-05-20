@@ -1,3 +1,9 @@
+library identifier: 'JenkinsPythonHelperLibrary@2024.1.2', retriever: modernSCM(
+  [$class: 'GitSCMSource',
+   remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
+   ])
+
+
 def getMacToxTestsParallel(args = [:]){
     def nodeLabel = args['label']
     args.remove('label')
@@ -262,13 +268,6 @@ pipeline {
                     }
                     steps{
                         script{
-                            def tox = fileLoader.fromGit(
-                                                        'tox',
-                                                        'https://github.com/UIUCLibrary/jenkins_helper_scripts.git',
-                                                        '8',
-                                                        null,
-                                                        ''
-                                                        )
                             def linuxJobs = [:]
 
                             def windowsJobs = [:]
@@ -276,7 +275,7 @@ pipeline {
                             parallel(
                                 'Tox Information Gathering For: Linux': {
                                     if(nodesByLabel("linux && docker").size() > 0){
-                                        linuxJobs = tox.getToxTestsParallel(
+                                        linuxJobs = getToxTestsParallel(
                                             envNamePrefix: 'Tox Linux',
                                             label: 'linux && docker',
                                             dockerfile: 'ci/docker/linux/tox/Dockerfile',
@@ -290,7 +289,7 @@ pipeline {
                                 },
                                 'Tox Information Gathering For: Windows': {
                                     if(nodesByLabel('windows && docker').size() > 0){
-                                        windowsJobs = tox.getToxTestsParallel(
+                                        windowsJobs = getToxTestsParallel(
                                             envNamePrefix: 'Tox Windows',
                                             label: 'windows && docker',
                                             dockerfile: 'ci/docker/windows/tox/Dockerfile',
