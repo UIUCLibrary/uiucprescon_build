@@ -305,7 +305,7 @@ pipeline {
                                     if(nodesByLabel('mac && python3').size() > 0){
                                         macJobs = macJobs + getMacToxTestsParallel(
                                           label: 'mac && python3', 
-                                          envNamePrefix: 'mac',
+                                          envNamePrefix: 'Tox Mac',
                                           retry: 2
                                         )
                                     }
