@@ -76,12 +76,13 @@ RUN Invoke-WebRequest https://aka.ms/vs/17/release/vs_buildtools.exe -OutFile vs
 ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
 ARG ChocolateyEnvironmentDebug=false
 COPY ci/docker/windows/tox/chocolatey/install_choco.ps1 choco/install_choco.ps1
+ARG chocolateyVersion
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     ./choco/install_choco.ps1 ; `
     if( -not ([string]::IsNullOrEmpty($Env:CHOCOLATEY_SOURCE ))) `
     { `
         Write-Host "Adding $env:CHOCOLATEY_SOURCE to chocolatey sources" ; `
-        choco source add -n=CHOCOLATEY_SOURCE --priority=1 -s=\"$env:CHOCOLATEY_SOURCE\"; `
+        choco source add -n=CHOCOLATEY_SOURCE --priority=1 -s=\"${env:CHOCOLATEY_SOURCE}\"; `
     }; `
     Write-Host "Disabling Showing Download Progress" ; `
     choco feature disable -n=showDownloadProgress ; `
