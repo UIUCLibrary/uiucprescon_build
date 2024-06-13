@@ -1,5 +1,6 @@
 param (
     [Parameter(Mandatory=$true)][String]$InstallPath,
+    [Parameter(Mandatory=$true)][String]$VSConfigFile,
     [String]$VsbuildtoolsURL='https://aka.ms/vs/17/release/vs_buildtools.exe'
 
 )
@@ -25,12 +26,9 @@ function TestInstalledProperty ($VS_INSTALL_PATH) {
     Write-Host "Testing for CL"
     cmd /S /C where cl
     Write-Host "Testing for CL - Success"
-    Write-Host "Removing build tools installer"
-    Remove-Item vs_buildtools.exe
-    Write-Host "Removing build tools installer - Done"
     Write-Host "Finished installing Visual Studio Build Tools"
 }
-function InstallMSVC ($VS_INSTALL_PATH) {
+function InstallMSVC ($VS_INSTALL_PATH, $ConfigFile) {
     Invoke-WebRequest $VsbuildtoolsURL -OutFile vs_buildtools.exe
     Write-Host "Installing Visual Studio Build Tools to ${VS_INSTALL_PATH}"
     $ARGS_LIST = @(`
@@ -38,21 +36,11 @@ function InstallMSVC ($VS_INSTALL_PATH) {
         '--wait', `
         '--norestart', `
         '--nocache', `
-        '--installPath', `
-         ${VS_INSTALL_PATH},`
-        '--add Microsoft.VisualStudio.Workload.VCTools', `
-        '--add Microsoft.VisualStudio.Component.VC.CLI.Support', `
-        '--add Microsoft.VisualStudio.Component.VC.CoreBuildTools', `
-        '--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64', `
-        '--add Microsoft.VisualStudio.ComponentGroup.VC.Tools.142.x86.x64', `
-        '--add Microsoft.VisualStudio.Component.Windows10SDK.18362', `
-        '--remove Microsoft.VisualStudio.Component.Windows10SDK.10240',`
-        '--remove Microsoft.VisualStudio.Component.Windows10SDK.10586', `
-        '--remove Microsoft.VisualStudio.Component.Windows10SDK.14393', `
-        '--remove Microsoft.VisualStudio.Component.Windows81SDK'`
+        '--installPath', ${VS_INSTALL_PATH},`
+         '--config', ${ConfigFile}
+
     )
     $process = Start-Process -NoNewWindow -PassThru -FilePath vs_buildtools.exe  -ArgumentList $ARGS_LIST -Wait
-
     if ( $process.ExitCode -eq 0) {
         Write-Host 'Installing Visual Studio Build Tools - Done'
     } else {
@@ -64,7 +52,10 @@ function InstallMSVC ($VS_INSTALL_PATH) {
         Write-Host $message
         throw 'unable to continue'
     }
+    Write-Host "Removing build tools installer"
+    Remove-Item vs_buildtools.exe
+    Write-Host "Removing build tools installer - Done"
 }
-InstallMSVC $InstallPath
+InstallMSVC $InstallPath $VSConfigFile
 
 TestInstalledProperty $InstallPath

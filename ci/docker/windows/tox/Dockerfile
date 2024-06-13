@@ -12,11 +12,12 @@ FROM ${FROM_IMAGE} as BASE_BUILDER
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
 COPY ci/docker/windows/tox/msvc/startup.bat c:/startup/startup.bat
-COPY ci/docker/windows/tox/install_msvc.ps1 c:/scripts/install_msvc.ps1
+COPY ci/docker/windows/tox/msvc/visual_studio_config.json c:/setup/config.vsconfig
+COPY ci/docker/windows/tox/msvc/install_msvc.ps1 c:/scripts/install_msvc.ps1
 ARG VS_INSTALL_PATH
-RUN c:/scripts/install_msvc.ps1 ${Env:VS_INSTALL_PATH} ; `
-    Get-ChildItem C:\Users\ContainerAdministrator\AppData\Local\Temp | Remove-Item -Recurse -Force -Verbose
 
+RUN c:/scripts/install_msvc.ps1 ${Env:VS_INSTALL_PATH} c:/setup/config.vsconfig; `
+    Get-ChildItem C:\Users\ContainerAdministrator\AppData\Local\Temp | Remove-Item -Recurse -Force -Verbose
 ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
 ARG ChocolateyEnvironmentDebug=false
 COPY ci/docker/windows/tox/chocolatey/install_choco.ps1 choco/install_choco.ps1
