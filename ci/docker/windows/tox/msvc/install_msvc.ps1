@@ -52,6 +52,26 @@ function InstallMSVC ($VS_INSTALL_PATH, $ConfigFile) {
         Write-Host $message
         throw 'unable to continue'
     }
+
+    $resultingConfigFile="c:\setup\myconfig.vsconfig"
+    $exportArgs = @(`
+        'export',
+        '--quiet',
+        '--nocache',
+        '--force',
+        '--config', ${resultingConfigFile},
+        '--installPath', ${VS_INSTALL_PATH}
+    )
+    $exportProcess = Start-Process -NoNewWindow -PassThru -FilePath 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe'  -ArgumentList $exportArgs   -Wait
+    if ( $exportProcess.ExitCode -eq 0) {
+        Get-Content $resultingConfigFile
+    } else
+    {
+        Write-Host "Exporting config with Visual Studio Build Tools exited with code $( $exportProcess.ExitCode )"
+        throw "Failed Exporting config file"
+    }
+    Remove-Item $resultingConfigFile
+
     Write-Host "Removing build tools installer"
     Remove-Item vs_buildtools.exe
     Write-Host "Removing build tools installer - Done"
