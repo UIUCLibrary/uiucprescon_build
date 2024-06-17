@@ -20,10 +20,12 @@ RUN c:/scripts/install_msvc.ps1 ${Env:VS_INSTALL_PATH} c:/setup/config.vsconfig;
     Get-ChildItem C:\Users\ContainerAdministrator\AppData\Local\Temp | Remove-Item -Recurse -Force -Verbose
 ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
 ARG ChocolateyEnvironmentDebug=false
-COPY ci/docker/windows/tox/chocolatey/install_choco.ps1 choco/install_choco.ps1
 ARG chocolateyVersion
+COPY ci/docker/windows/tox/chocolatey/install.ps1 c:/choco/install.ps1
+COPY ci/docker/windows/tox/chocolatey/get_latest_chocolatey_url.ps1 c:/choco/get_latest_chocolatey_url.ps1
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
-    ./choco/install_choco.ps1 ; `
+    $chocolateyDownloadUrl = c:/choco/get_latest_chocolatey_url.ps1 -packageRepo $env:CHOCOLATEY_SOURCE; `
+    c:/choco/install.ps1 -ChocolateyDownloadUrl $chocolateyDownloadUrl;`
     if( -not ([string]::IsNullOrEmpty($Env:CHOCOLATEY_SOURCE ))) `
     { `
         Write-Host "Adding $env:CHOCOLATEY_SOURCE to chocolatey sources" ; `
@@ -32,6 +34,7 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     Write-Host "Disabling Showing Download Progress" ; `
     choco feature disable -n=showDownloadProgress ; `
     Remove-Item -Force -Recurse ${Env:TEMP}\*
+
 
 ADD ci/docker/windows/tox/chocolatey/python.xml choco/python.config
 RUN C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress --verbose choco/python.config ;`
