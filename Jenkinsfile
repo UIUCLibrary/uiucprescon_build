@@ -1,4 +1,4 @@
-library identifier: 'JenkinsPythonHelperLibrary@2024.1.2', retriever: modernSCM(
+library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
   [$class: 'GitSCMSource',
    remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
    ])
@@ -281,6 +281,7 @@ pipeline {
                                             dockerfile: 'ci/docker/linux/tox/Dockerfile',
                                             dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL',
                                             dockerRunArgs: "-v pipcache_uiucprescon_build:/.cache/pip",
+                                            verbosity: 1,
                                             retry: 2
                                         )
                                     } else {
@@ -295,6 +296,7 @@ pipeline {
                                             dockerfile: 'ci/docker/windows/tox/Dockerfile',
                                             dockerArgs: '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion --build-arg PIP_DOWNLOAD_CACHE=c:/users/containeradministrator/appdata/local/pip',
                                             dockerRunArgs: "-v pipcache_uiucprescon_build:c:/users/containeradministrator/appdata/local/pip",
+                                            verbosity: 1,
                                             retry: 2
                                         )
                                     } else {
