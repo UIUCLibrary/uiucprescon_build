@@ -130,7 +130,7 @@ def build_deps_with_conan(
     if conanbuildinfotext is None:
         raise AssertionError("Missing conanbuildinfo.txt")
     metadata_strategy = ConanBuildInfoTXT()
-    metadata_strategy.parse(conanbuildinfotext)
+    return metadata_strategy.parse(conanbuildinfotext)
 
 
 def fixup_library(shared_library: str) -> None:

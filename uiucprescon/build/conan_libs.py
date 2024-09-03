@@ -7,7 +7,7 @@ import abc
 import typing
 from typing import Dict, List, Optional, cast, Set, Tuple, Union
 import setuptools
-from distutils import ccompiler, msvccompiler
+import distutils.ccompiler
 from pathlib import Path
 from uiucprescon.build.deps import get_win_deps
 from uiucprescon.build.compiler_info import (
@@ -31,8 +31,17 @@ class AbsConanBuildInfo(abc.ABC):
 
 
 class AbsResultTester(abc.ABC):
-    def __init__(self, compiler: Optional[ccompiler.CCompiler] = None) -> None:
-        self.compiler = compiler or ccompiler.new_compiler()
+    def __init__(self, compiler: Optional[distutils.ccompiler.CCompiler] = None) -> None:
+        self.compiler = compiler or self._get_compiler()
+
+    @staticmethod
+    def _get_compiler():
+        build_ext = setuptools.Distribution().get_command_obj("build_ext")
+        build_ext.finalize_options()
+        build_ext.extensions = [setuptools.Extension("ignored", ["ignored.c"])]
+        build_ext.build_extensions = lambda: None
+        build_ext.run()
+        return build_ext.compiler
 
     def test_shared_libs(self, libs_dir: str) -> None:
         """Make sure all shared libraries in directory are linked"""
@@ -57,13 +66,11 @@ class MacResultTester(AbsResultTester):
 
 class WindowsResultTester(AbsResultTester):
     def test_binary_dependents(self, file_path: Path) -> None:
-        compiler = cast(msvccompiler.MSVCCompiler, self.compiler)
-        compiler.initialize()
 
         deps = get_win_deps(
             str(file_path.resolve()),
             output_file=f"{file_path.stem}.depends",
-            compiler=compiler
+            compiler=self.compiler
         )
 
         system_path = os.getenv('PATH')
