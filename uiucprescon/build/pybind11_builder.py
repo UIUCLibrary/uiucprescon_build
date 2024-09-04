@@ -8,6 +8,8 @@ from setuptools.command.build_py import build_py as BuildPy
 from setuptools.extension import Extension
 from setuptools.command.build_clib import build_clib as BuildClib
 from distutils.ccompiler import CCompiler
+import  distutils
+import distutils.dep_util
 import os
 
 
@@ -92,7 +94,29 @@ class BuildPybind11Extension(build_ext):
     def build_extension(self, ext: Pybind11Extension) -> None:
         self._add_conan_libs_to_ext(ext)
         self.compiler: CCompiler
+        # print(distutils._msvccompiler._find_vcvarsall)
+        # og = distutils._msvccompiler._find_vc2017
+        # def _find_vc2017():
+        #     import pprint
+        #     # print(type(os.environ))
+        #     # pprint.pprint(os.environ)
+        #     root = os.environ.get("PROGRAMFILES(X86)") or os.environ.get("PROGRAMFILES")
+        #     # root = os.environ.get("ProgramFiles(x86)") or os.environ.get("ProgramFiles")
+        #     print(root)
+        #     results = og()
+            # print(results)
+            # return results
+# setuptools._distutils._msvccompiler
+        # setattr(distutils._msvccompiler, "_find_vc2017", _find_vc2017)
+        # import subprocess
+        # og = subprocess.check_output
+        # def check_output(*args, **kwargs):
+        #     print(*args, **kwargs)
+        #     return og(*args, **kwargs)
+        # setattr(subprocess, "check_output", check_output)
+        # breakpoint()
         super().build_extension(ext)
+        # setattr(distutils._msvccompiler)
         fullname = self.get_ext_fullname(ext.name)
         created_extension = os.path.join(
             self.build_lib,

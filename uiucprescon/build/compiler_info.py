@@ -56,14 +56,20 @@ def get_visual_studio_version() -> str:
                 winreg.HKEY_LOCAL_MACHINE,
                 key % v,
                 0,
-                winreg.KEY_ALL_ACCESS
+                winreg.KEY_READ
             )
             installed_versions.append(v)
-        except Exception as e:
-            pass
+        except WindowsError as e:
+            if e.errno == 2:
+                # Can't find the registry key, it's okay, it might not exist.
+                continue
+            raise  e
     sorted_values = sorted(installed_versions, key=lambda value: float(value))
-    print(sorted_values)
-    return sorted_values[-1].split(".")[0]
+    try:
+        return sorted_values[-1].split(".")[0]
+    except IndexError:
+        print("No Visual Studio installed", file=sys.stderr)
+        raise FileNotFoundError
 
 
 def get_clang_version() -> str:
