@@ -1,7 +1,9 @@
 import os
 
 import setuptools.build_meta
+import platform
 from . import conan_libs
+from . import monkey
 from pathlib import Path
 from typing import Optional, Dict, List, Union, cast
 
@@ -26,6 +28,9 @@ def build_wheel(
         ] = None,
         metadata_directory: Optional[str] = None
 ) -> str:
+    if platform.system() == 'Windows':
+        monkey.patch_for_msvc_specialized_compiler()
+
     if (
             config_settings is not None and
             config_settings.get('conan_cache') is not None and
