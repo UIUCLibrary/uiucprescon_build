@@ -45,8 +45,8 @@ else:
         HKEY_CLASSES_ROOT = None
 
     environ: dict[str, str] = dict()
-#
-#
+
+
 def _msvc14_find_vc2015():
     """Python 3.8 "distutils/_msvccompiler.py" backport"""
     try:
@@ -55,7 +55,7 @@ def _msvc14_find_vc2015():
             r"Software\Microsoft\VisualStudio\SxS\VC7",
             0,
             winreg.KEY_READ | winreg.KEY_WOW64_32KEY,
-            )
+        )
     except OSError:
         return None, None
 
@@ -129,7 +129,7 @@ PLAT_SPEC_TO_RUNTIME = {
     'x86_arm64': 'arm64',
 }
 
-#
+
 def _msvc14_find_vcvarsall(plat_spec):
     """Python 3.8 "distutils/_msvccompiler.py" backport"""
     _, best_dir = _msvc14_find_vc2017()
