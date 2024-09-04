@@ -7,9 +7,7 @@ from . import monkey
 from pathlib import Path
 from typing import Optional, Dict, List, Union, cast
 
-print("pre pyproject.toml")
 pyproj_toml = Path('pyproject.toml')
-print("post pyproject.toml")
 
 
 def build_sdist(
@@ -75,11 +73,7 @@ def get_requires_for_build_sdist(
             Dict[str, Union[str, List[str], None]]
         ] = None
 ) -> List[str]:
-    print("get_requires_for_build_sdist")
-    try:
-        return []
-    finally:
-        print("get_requires_for_build_sdist - Done")
+    return []
 
 
 def prepare_metadata_for_build_wheel(
@@ -88,14 +82,10 @@ def prepare_metadata_for_build_wheel(
             Dict[str, Union[str, List[str], None]]
         ] = None
 ) -> str:
-    print('prepare_metadata_for_build_wheel')
-    try:
-        return setuptools.build_meta.prepare_metadata_for_build_wheel(
-            metadata_directory,
-            config_settings
-        )
-    finally:
-        print('prepare_metadata_for_build_wheel done')
+    return setuptools.build_meta.prepare_metadata_for_build_wheel(
+        metadata_directory,
+        config_settings
+    )
 
 
 def get_requires_for_build_wheel(
