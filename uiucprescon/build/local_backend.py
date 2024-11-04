@@ -94,3 +94,11 @@ def get_requires_for_build_wheel(
         ] = None
 ) -> List[str]:
     return ["wheel >= 0.25", "setuptools", 'pybind11>=2.5', 'toml']
+
+
+def build_editable(
+    wheel_directory: Union[str, os.PathLike[str]],
+    config_settings: Union[Dict[str, Union[str, List[str], None]], None] = None,
+    metadata_directory: Optional[str] = None,
+):
+    return setuptools.build_meta.build_editable(wheel_directory, config_settings, metadata_directory)

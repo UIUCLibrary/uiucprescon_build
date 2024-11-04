@@ -36,12 +36,11 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     Remove-Item -Force -Recurse ${Env:TEMP}\*
 
 
-ADD ci/docker/windows/tox/chocolatey/python.xml choco/python.config
-RUN C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress --verbose choco/python.config ;`
+COPY ci/docker/windows/tox/chocolatey/python.xml choco/python.config
+COPY ci/docker/windows/tox/chocolatey/Install-Python.ps1 c:/choco/Install-Python.ps1
+RUN c:/choco/Install-Python.ps1 choco/python.config ;`
     Remove-Item C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey -Recurse ; `
-    refreshenv ; `
     Remove-Item -Force -Recurse ${Env:TEMP}\* ; `
-    py --list ;`
     Write-Host "Installing Python with Chocolatey - Done"
 
 ADD ci/docker/windows/tox/chocolatey/packages.xml choco/packages.config
