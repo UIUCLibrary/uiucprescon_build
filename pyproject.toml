@@ -22,7 +22,7 @@ dependencies = [
 ]
 license = {text = "University of Illinois/NCSA Open Source License"}
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 [tool.setuptools.dynamic]
 version = {attr = "uiucprescon.build.VERSION"}
 
