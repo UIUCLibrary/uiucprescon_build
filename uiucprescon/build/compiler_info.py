@@ -34,6 +34,10 @@ def get_compiler_name() -> str:
                 file=sys.stderr
             )
             raise
+    print(
+        f"python compiler = {platform.python_compiler()}",
+        file=sys.stderr
+    )
     raise ValueError("Unable to locate compiler or unknown compiler")
 
 
