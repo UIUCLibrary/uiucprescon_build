@@ -100,8 +100,8 @@ def get_clang_version() -> str:
             if _cfg_target_split[:2] >= [10, 3] > cur_target_split[:2]:
                 my_msg = (
                     "$MACOSX_DEPLOYMENT_TARGET mismatch: "
-                    'now "%s" but "%s" during configure;'
-                    "must use 10.3 or later" % (cur_target, _cfg_target)
+                    f'now "{cur_target}" but "{_cfg_target}" during configure;'
+                    "must use 10.3 or later"
                 )
                 raise PlatformError(my_msg)
             env = dict(os.environ, MACOSX_DEPLOYMENT_TARGET=cur_target)
