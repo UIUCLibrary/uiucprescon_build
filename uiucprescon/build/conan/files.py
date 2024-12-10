@@ -3,6 +3,8 @@ from typing import List, Dict, TypedDict, Iterable, Optional
 import abc
 import warnings
 from uiucprescon.build.utils import locate_file
+
+
 class ConanBuildInfoParser:
     def __init__(self, fp: io.TextIOWrapper) -> None:
         self._fp = fp
@@ -69,16 +71,15 @@ class AbsConanBuildInfo(abc.ABC):
 
 
 class ConanBuildInfoTXT(AbsConanBuildInfo):
-
     def parse(self, filename: str) -> ConanBuildInfo:
         with open(filename, "r", encoding="utf-8") as f:
             parser = ConanBuildInfoParser(f)
             data = parser.parse()
-            definitions = data['defines']
-            include_paths = data['includedirs']
-            lib_paths = data['libdirs']
-            bin_paths = data['bindirs']
-            libs = data['libs']
+            definitions = data["defines"]
+            include_paths = data["includedirs"]
+            lib_paths = data["libdirs"]
+            bin_paths = data["bindirs"]
+            libs = data["libs"]
             names: List[str] = [
                 value.replace("name_", "")
                 for value in data
@@ -95,31 +96,31 @@ class ConanBuildInfoTXT(AbsConanBuildInfo):
                     "bindirs": data.get(f"bindirs_{library_name}", []),
                     "resdirs": data.get(f"resdirs_{library_name}", []),
                     "builddirs": data.get(f"builddirs_{library_name}", []),
-                    "system_libs":
-                        data.get(f"system_libs_{library_name}", []),
-                    "defines":
-                        data.get(f"defines_{library_name}", []),
-                    "cppflags":
-                        data.get(f"cppflags_{library_name}", []),
-                    "cxxflags":
-                        data.get(f"cxxflags_{library_name}", []),
+                    "system_libs": data.get(f"system_libs_{library_name}", []),
+                    "defines": data.get(f"defines_{library_name}", []),
+                    "cppflags": data.get(f"cppflags_{library_name}", []),
+                    "cxxflags": data.get(f"cxxflags_{library_name}", []),
                     "cflags": data.get(f"cflags_{library_name}", []),
-                    "sharedlinkflags":
-                        data.get(f"sharedlinkflags_{library_name}", []),
-                    "exelinkflags":
-                        data.get(f"exelinkflags_{library_name}", []),
+                    "sharedlinkflags": data.get(
+                        f"sharedlinkflags_{library_name}", []
+                    ),
+                    "exelinkflags": data.get(
+                        f"exelinkflags_{library_name}", []
+                    ),
                     "sysroot": data.get(f"sysroot_{library_name}", []),
-                    "frameworks":
-                        data.get(f"frameworks_{library_name}", []),
-                    "frameworkdirs":
-                        data.get(f"frameworkdirs_{library_name}", []),
+                    "frameworks": data.get(f"frameworks_{library_name}", []),
+                    "frameworkdirs": data.get(
+                        f"frameworkdirs_{library_name}", []
+                    ),
                     "rootpath": data.get(f"rootpath_{library_name}", []),
                     "name": library_name,
                     "version": version[0] if version else None,
-                    "generatornames":
-                        data.get(f"generatornames_{library_name}", []),
-                    "generatorfilenames":
-                        data.get(f"generatorfilenames_{library_name}", []),
+                    "generatornames": data.get(
+                        f"generatornames_{library_name}", []
+                    ),
+                    "generatorfilenames": data.get(
+                        f"generatorfilenames_{library_name}", []
+                    ),
                 }
         return {
             "definitions": definitions,
@@ -127,19 +128,21 @@ class ConanBuildInfoTXT(AbsConanBuildInfo):
             "lib_paths": list(lib_paths),
             "bin_paths": list(bin_paths),
             "libs": list(libs),
-            "metadata": libsmetadata
-
+            "metadata": libsmetadata,
         }
+
+
 def locate_conanbuildinfo(search_locations: List[str]) -> Optional[str]:
     warnings.warn(
         message="use uiucprescon.build.utils.locate_file() instead",
-        category=DeprecationWarning
+        category=DeprecationWarning,
     )
     return locate_file("conanbuildinfo.txt", search_locations)
+
 
 def locate_conanbuildinfo_json(search_locations: List[str]) -> Optional[str]:
     warnings.warn(
         message="use uiucprescon.build.utils.locate_file() instead",
-        category=DeprecationWarning
+        category=DeprecationWarning,
     )
     return locate_file("conanbuildinfo.json", search_locations)
