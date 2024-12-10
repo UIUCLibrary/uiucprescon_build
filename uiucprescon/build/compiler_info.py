@@ -72,6 +72,32 @@ def get_visual_studio_version() -> str:
         raise FileNotFoundError
 
 
+def _get_clang_version(env) -> str:
+    cmd = ["cc", "--version"]
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE)
+    proc.wait()
+    exitcode = proc.returncode
+    clang_version_regex = re.compile(
+        r"(?<=Apple clang version )((\d+[.]){1,2}\d+)"
+    )
+    if proc.stdout is None:
+        raise ValueError("unable to read standard out of process")
+    compiler_response = proc.stdout.read().decode("utf-8")
+    try:
+        env_version = clang_version_regex.search(compiler_response)[0]
+    except TypeError as result_error:
+        print(compiler_response, file=sys.stderr)
+        raise TypeError(
+            "Unable to parse compiler version response"
+        ) from result_error
+
+    parts = env_version.split(".")
+    if exitcode:
+        raise ExecError(f"command {cmd} failed with exit code {exitcode}")
+
+    return f"{parts[0]}.{parts[1]}"
+
+
 def get_clang_version() -> str:
     cmd = ["cc", "--version"]
 
@@ -107,49 +133,33 @@ def get_clang_version() -> str:
             env = dict(os.environ, MACOSX_DEPLOYMENT_TARGET=cur_target)
 
     try:
-        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE)
-        proc.wait()
-        exitcode = proc.returncode
-        clang_version_regex = re.compile(
-            r"(?<=Apple clang version )((\d+[.]){1,2}\d+)"
-        )
-        if proc.stdout is None:
-            raise ValueError("unable to read standard out of process")
-        compiler_response = proc.stdout.read().decode("utf-8")
-        try:
-            env_version = clang_version_regex.search(compiler_response)[0]
-        except TypeError as result_error:
-            print(compiler_response, file=sys.stderr)
-            raise TypeError(
-                "Unable to parse compiler version response"
-            ) from result_error
-
-        parts = env_version.split(".")
-        if exitcode:
-            raise ExecError(f"command {cmd} failed with exit code {exitcode}")
-
-        return f"{parts[0]}.{parts[1]}"
+        return _get_clang_version(env)
     except OSError as exc:
         raise ExecError("command %r failed: %s" % (cmd, exc.args[-1])) from exc
+
+
+def _get_gcc_version(cmd) -> str:
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    proc.wait()
+    exitcode = proc.returncode
+    if proc.stdout is None:
+        raise ValueError("unable to read standard out of process")
+    compiler_response = proc.stdout.read().decode("utf-8")
+    if exitcode:
+        raise ExecError(f"command {cmd} failed with exit code {exitcode}")
+    compiler_version = compiler_response.strip()
+    version_comps = compiler_version.split(".")
+
+    if len(version_comps) == 1:
+        return version_comps[0]
+    return f"{version_comps[0]}.{version_comps[1]}"
 
 
 def get_gcc_version() -> str:
     cmd = ["cc", "-dumpfullversion", "-dumpversion"]
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-        proc.wait()
-        exitcode = proc.returncode
-        if proc.stdout is None:
-            raise ValueError("unable to read standard out of process")
-        compiler_response = proc.stdout.read().decode("utf-8")
-        if exitcode:
-            raise ExecError(f"command {cmd} failed with exit code {exitcode}")
-        compiler_version = compiler_response.strip()
-        version_comps = compiler_version.split(".")
-
-        if len(version_comps) == 1:
-            return version_comps[0]
-        return f"{version_comps[0]}.{version_comps[1]}"
+        return _get_gcc_version(cmd)
     except OSError as exc:
         raise ExecError("command %r failed: %s" % (cmd, exc.args[-1])) from exc
 
