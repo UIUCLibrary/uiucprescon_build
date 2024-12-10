@@ -8,8 +8,6 @@ from setuptools.command.build_py import build_py as BuildPy
 from setuptools.extension import Extension
 from setuptools.command.build_clib import build_clib as BuildClib
 from distutils.ccompiler import CCompiler
-import  distutils
-import distutils.dep_util
 import os
 
 

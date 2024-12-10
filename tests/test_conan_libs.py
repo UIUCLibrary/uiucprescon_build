@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 from uiucprescon.build import conan_libs
 from setuptools import Extension
 import sys
