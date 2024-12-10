@@ -1,9 +1,13 @@
+toml
+conan
 coverage
 flake8
 lxml
 mypy
-types-toml
+pybind11
+pydocstyle
 pytest
 pylint
 sphinx
-pydocstyle
+tox
+types-toml
