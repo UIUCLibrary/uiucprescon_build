@@ -42,10 +42,6 @@ source = [
 ]
 #[tool.coverage.paths]
 [tool.coverage.report]
-source = [
-    ".",
-    "uiucprescon/build"
-]
 include_namespace_packages= true
 [tool.coverage.paths]
 

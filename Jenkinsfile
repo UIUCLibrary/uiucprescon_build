@@ -127,7 +127,7 @@ pipeline {
                                     script: '''python3 -m venv --clear bootstrap_uv
                                                trap "rm -rf bootstrap_uv" EXIT
                                                bootstrap_uv/bin/pip install --disable-pip-version-check uv
-                                               bootstrap_uv/bin/uv venv  --clear --python-preference=only-system  venv
+                                               bootstrap_uv/bin/uv venv  --python-preference=only-system  venv
                                                bootstrap_uv/bin/uv pip install uv -r requirements-ci.txt --python venv
                                                '''
                                            )
@@ -192,6 +192,9 @@ pipeline {
                                             }
                                         }
                                         stage('PyTest'){
+                                            environment{
+                                                USERNAME='jenkins'
+                                            }
                                             steps{
                                                 catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
                                                     sh(
