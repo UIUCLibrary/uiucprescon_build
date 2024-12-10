@@ -245,7 +245,7 @@ pipeline {
                                                   '''
                                     )
                                     archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/coverage-python.xml'
-                                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'reports/coverage.xml']])
+                                    recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'reports/coverage-python.xml']])
                                 }
                             }
                         }
