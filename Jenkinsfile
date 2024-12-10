@@ -192,6 +192,9 @@ pipeline {
                                             }
                                         }
                                         stage('PyTest'){
+                                            environment{
+                                                USERNAME='jenkins'
+                                            }
                                             steps{
                                                 catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
                                                     sh(
