@@ -102,16 +102,48 @@ pipeline {
             stages{
                 stage('Building and Testing') {
                     agent {
-                        dockerfile {
-                            filename 'ci/docker/linux/jenkins/Dockerfile'
-                            label 'linux && docker'
-                            additionalBuildArgs '--build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL'
+                        docker{
+                            image 'python'
+                            label 'docker && linux'
+                            args '--mount source=python-tmp-uiucprescon_build,target=/tmp'
                         }
                     }
+                    environment{
+                        PIP_CACHE_DIR='/tmp/pipcache'
+                        UV_INDEX_STRATEGY='unsafe-best-match'
+                        UV_TOOL_DIR='/tmp/uvtools'
+                        UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
+                        UV_CACHE_DIR='/tmp/uvcache'
+                    }
                     stages{
+                        stage('Setting up'){
+                            steps{
+                                mineRepository()
+                                sh(
+                                    label: 'Create virtual environment',
+                                    script: '''python3 -m venv bootstrap_uv
+                                               trap "rm -rf bootstrap_uv" EXIT
+                                               bootstrap_uv/bin/pip install --disable-pip-version-check uv
+                                               bootstrap_uv/bin/uv venv --python-preference=only-system  venv
+                                               bootstrap_uv/bin/uv pip install uv -r requirements-ci.txt --python venv
+                                               '''
+                                           )
+                                sh(
+                                    label: 'Install package in development mode',
+                                    script: '''. ./venv/bin/activate
+                                               uv pip install -e .
+                                            '''
+                                    )
+                                sh '''mkdir -p reports
+                                      mkdir -p logs
+                                   '''
+                            }
+                        }
                         stage('Building Docs'){
                             steps{
-                                sh 'python3 -m sphinx -W --keep-going -b html docs build/docs/html -w logs/build_sphinx_html.log'
+                                sh '''. ./venv/bin/activate
+                                      sphinx-build docs build/docs/html -b html -d build/docs/.doctrees -v -w logs/build_sphinx_html.log -W --keep-going
+                                   '''
                             }
                             post{
                                 always{
@@ -133,11 +165,6 @@ pipeline {
                         }
                         stage('Code Quality') {
                             stages{
-                                stage('Setting up'){
-                                    steps{
-                                        sh 'mkdir -p reports'
-                                    }
-                                }
                                 stage('Run Checks'){
                                     parallel{
                                         stage('pyDocStyle'){
@@ -145,9 +172,9 @@ pipeline {
                                                 catchError(buildResult: 'SUCCESS', message: 'Did not pass all pyDocStyle tests', stageResult: 'UNSTABLE') {
                                                     sh(
                                                         label: 'Run pydocstyle',
-                                                        script: '''mkdir -p reports
+                                                        script: '''. ./venv/bin/activate
                                                                    pydocstyle uiucprescon > reports/pydocstyle-report.txt
-                                                                   '''
+                                                                '''
                                                     )
                                                 }
                                             }
@@ -162,7 +189,7 @@ pipeline {
                                                 catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
                                                     sh(
                                                         label: 'Running Pytest',
-                                                        script:'''mkdir -p reports/coverage
+                                                        script:'''. ./venv/bin/activate
                                                                   coverage run --parallel-mode --source=uiucprescon -m pytest --junitxml=reports/pytest.xml
                                                                   '''
                                                    )
@@ -182,7 +209,10 @@ pipeline {
                                                 withEnv(['PYLINTHOME=/tmp/.cache/pylint']) {
                                                     catchError(buildResult: 'SUCCESS', message: 'Pylint found issues', stageResult: 'UNSTABLE') {
                                                         sh(label: 'Running pylint',
-                                                            script: 'pylint uiucprescon.build -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt'
+                                                            script: '''. ./venv/bin/activate
+                                                                       pylint uiucprescon.build -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
+                                                                    '''
+
                                                         )
                                                     }
                                                 }
@@ -198,7 +228,9 @@ pipeline {
                                             steps{
                                                 catchError(buildResult: 'SUCCESS', message: 'flake8 found some warnings', stageResult: 'UNSTABLE') {
                                                     sh(label: 'Running flake8',
-                                                       script: 'flake8 uiucprescon --tee --output-file=logs/flake8.log'
+                                                       script: '''. ./venv/bin/activate
+                                                                  flake8 uiucprescon --tee --output-file=logs/flake8.log
+                                                               '''
                                                     )
                                                 }
                                             }
@@ -214,7 +246,7 @@ pipeline {
                                                 catchError(buildResult: 'SUCCESS', message: 'MyPy found issues', stageResult: 'UNSTABLE') {
                                                     sh(
                                                         label: 'Running Mypy',
-                                                        script: '''mkdir -p logs
+                                                        script: '''. ./venv/bin/activate
                                                                    mypy -p uiucprescon --html-report reports/mypy/html > logs/mypy.log
                                                                    '''
                                                    )
@@ -231,7 +263,8 @@ pipeline {
                                     post{
                                         always{
                                             sh(label: 'combining coverage data',
-                                               script: '''coverage combine
+                                               script: '''. ./venv/bin/activate
+                                                          coverage combine
                                                           coverage xml -o ./reports/coverage-python.xml
                                                           '''
                                             )
@@ -241,17 +274,18 @@ pipeline {
                                     }
                                 }
                             }
-                            post{
-                                cleanup{
-                                    cleanWs(
-                                        deleteDirs: true,
-                                        patterns: [
-                                            [pattern: 'reports/', type: 'INCLUDE'],
-                                            [pattern: 'logs/', type: 'INCLUDE'],
-                                        ]
-                                    )
-                                }
-                            }
+                        }
+                    }
+                    post{
+                        cleanup{
+                            cleanWs(
+                                deleteDirs: true,
+                                patterns: [
+                                    [pattern: 'venv/', type: 'INCLUDE'],
+                                    [pattern: 'reports/', type: 'INCLUDE'],
+                                    [pattern: 'logs/', type: 'INCLUDE'],
+                                ]
+                            )
                         }
                     }
                 }
