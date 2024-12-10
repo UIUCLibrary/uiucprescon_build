@@ -52,7 +52,7 @@ def get_visual_studio_version() -> str:
         "8.0", "9.0", "10.0", "11.0", "12.0", "14.0", "15.0", "16.0"
     ]
     installed_versions = []
-    key = "SOFTWARE\Microsoft\VisualStudio\%s"
+    key = r"SOFTWARE\Microsoft\VisualStudio\%s"
 
     for v in possible_versions:
         try:
