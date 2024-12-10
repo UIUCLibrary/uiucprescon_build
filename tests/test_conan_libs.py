@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 from uiucprescon.build import conan_libs
 from setuptools import Extension
 import sys
@@ -26,7 +24,7 @@ def test_get_conan_options(tmp_path, monkeypatch):
     source_root.mkdir()
 
     pyproject = source_root / "pyproject.toml"
-    pyproject.write_text(f"""
+    pyproject.write_text("""
 [project]
 name = "dummy"
     """)
