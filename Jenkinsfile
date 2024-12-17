@@ -357,32 +357,26 @@ pipeline {
                                                                 'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
                                                                 'UV_CACHE_DIR=/tmp/uvcache',
                                                             ]){
-                                                                try{
-                                                                    image.inside('--mount source=python-tox-tmp-pykdu,target=/tmp'){
-                                                                        try{
+                                                                retry(3){
+                                                                    try{
+                                                                        image.inside('--mount source=python-tox-tmp-pykdu,target=/tmp'){
                                                                             sh( label: 'Running Tox',
-                                                                                script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                script: """python3 -m venv venv --clear
+                                                                                            ./venv/bin/pip install --disable-pip-version-check uv
                                                                                            ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} -vvv
                                                                                         """
                                                                                 )
-                                                                        } catch(e) {
-                                                                            if( fileExists('venv/bin/uv')){
-                                                                                sh(script: '''. ./venv/bin/activate
-                                                                                      uv python list
-                                                                                      '''
-                                                                                        )
-                                                                            }
-                                                                            throw e
                                                                         }
+                                                                    } finally{
+                                                                        sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                                                        cleanWs(
+                                                                            patterns: [
+                                                                                [pattern: 'venv/', type: 'INCLUDE'],
+                                                                                [pattern: '.tox', type: 'INCLUDE'],
+                                                                                [pattern: '**/__pycache__/', type: 'INCLUDE'],
+                                                                            ]
+                                                                        )
                                                                     }
-                                                                } finally{
-                                                                    cleanWs(
-                                                                        patterns: [
-                                                                            [pattern: 'venv/', type: 'INCLUDE'],
-                                                                            [pattern: '.tox', type: 'INCLUDE'],
-                                                                            [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                                        ]
-                                                                    )
                                                                 }
                                                             }
                                                         } finally {
