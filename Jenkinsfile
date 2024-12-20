@@ -400,13 +400,13 @@ pipeline {
                                  UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\uvtools'
                                  UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
                                  UV_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\uvcache'
-                                 VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
+//                                 VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
                             }
                             steps{
                                 script{
                                     def envs = []
                                     node('docker && windows'){
-                                        docker.image('python').inside('--mount source=python-tmp-uiucprescon_build,target=C:\\Users\\ContainerUser\\Documents'){
+                                        docker.image('python').inside("--mount source=uv_python_install_dir,target=${env.UV_CACHE_DIR}"){
                                             try{
                                                 checkout scm
                                                 bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
@@ -416,7 +416,6 @@ pipeline {
                                                     returnStdout: true,
                                                 ).trim().split('\r\n')
                                             } catch(e) {
-                                                bat 'dir'
                                                 if( fileExists('venv')){
                                                     bat 'dir venv'
                                                 }
@@ -448,7 +447,7 @@ pipeline {
                                                             image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion .')
                                                         }
                                                         try{
-                                                            image.inside('--mount source=python-tmp-tox-uiucprescon_build,target=C:\\Users\\ContainerUser\\Documents'){
+                                                            image.inside("--mount source=uv_python_install_dir,target=${env.UV_CACHE_DIR}"){
                                                                 retry(3){
                                                                     bat(label: 'Running Tox',
                                                                         script: """python -m venv venv --clear && venv\\Scripts\\pip --disable-pip-version-check install uv
