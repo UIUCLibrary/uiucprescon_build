@@ -4,10 +4,10 @@ ARG VS_INSTALL_PATH="C:\BuildTools"
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
 ARG FROM_IMAGE=mcr.microsoft.com/dotnet/framework/sdk:4.8-windowsservercore-ltsc2019
-FROM ${FROM_IMAGE} as certsgen
+FROM ${FROM_IMAGE} AS certsgen
 RUN certutil -generateSSTFromWU roots.sst
 
-FROM ${FROM_IMAGE} as BASE_BUILDER
+FROM ${FROM_IMAGE} AS BASE_BUILDER
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
@@ -46,32 +46,6 @@ RUN C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no
     }; `
     Write-Host "Finished install packages with Chocolatey"
 
-# ==============================================================================
-#
-FROM BASE_BUILDER
 COPY --from=certsgen c:/roots.sst roots.sst
 RUN certutil -addstore -f root roots.sst ; `
     del roots.sst
-ARG PIP_EXTRA_INDEX_URL
-ARG PIP_INDEX_URL
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
-
-COPY requirements-ci.txt c:/python_requirements/
-COPY requirements/ c:/python_requirements/requirements
-RUN python -m pip install pip --upgrade ; `
-    pip install wheel ; `
-    pip install -r c:\python_requirements\requirements-ci.txt
-
-ARG PIPX_HOME
-ENV PIPX_HOME=${PIPX_HOME}
-ENV PIPX_BIN_DIR=${PIPX_HOME}\bin
-
-
-RUN py -3 -m pip install --no-cache-dir pipx ; `
-    py -3 -m pipx ensurepath
-RUN py -3 -m pipx install 'devpi-client<7.0'
-
-ENV PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}
-ENV PIP_INDEX_URL=${PIP_INDEX_URL}
-WORKDIR C:/src
-CMD tox --workdir ${Env:TEMP}\tox\ -vv  --recreate -p=auto
