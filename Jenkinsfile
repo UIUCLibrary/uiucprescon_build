@@ -497,6 +497,7 @@ pipeline {
                                                 returnStdout: true,
                                             ).trim().split('\n')
                                         } finally{
+                                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                             cleanWs(
                                                 patterns: [
                                                     [pattern: 'venv/', type: 'INCLUDE'],
@@ -530,6 +531,7 @@ pipeline {
                                                                    )
                                                                 throw e
                                                             } finally{
+                                                                sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                                 cleanWs(
                                                                     patterns: [
                                                                         [pattern: 'venv/', type: 'INCLUDE'],
