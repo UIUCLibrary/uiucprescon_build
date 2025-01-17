@@ -525,10 +525,14 @@ pipeline {
                                                                             """
                                                                     )
                                                             } catch(e) {
-                                                                sh(script: '''. ./venv/bin/activate
-                                                                              uv python list
-                                                                           '''
-                                                                   )
+                                                                script{
+                                                                    if(fileExists( 'venv/bin/uv')){
+                                                                        sh(script: '''. ./venv/bin/activate
+                                                                                      uv python list
+                                                                                   '''
+                                                                           )
+                                                                    }
+                                                                }
                                                                 throw e
                                                             } finally{
                                                                 sh "${tool(name: 'Default', type: 'git')} clean -dfx"
