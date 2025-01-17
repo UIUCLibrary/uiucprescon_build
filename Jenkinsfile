@@ -519,7 +519,7 @@ pipeline {
                                                         ]){
                                                             try{
                                                                 sh( label: 'Running Tox',
-                                                                    script: """python3 -m venv venv && ./venv/bin/pip install --disable-pip-version-check uv
+                                                                    script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
                                                                                ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} -vvv
                                                                             """
                                                                     )
