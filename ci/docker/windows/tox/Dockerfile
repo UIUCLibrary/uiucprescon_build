@@ -3,7 +3,7 @@ ARG PIPX_HOME=c:\pipx
 ARG VS_INSTALL_PATH="C:\BuildTools"
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
-ARG FROM_IMAGE=mcr.microsoft.com/dotnet/framework/sdk:4.8-windowsservercore-ltsc2019
+ARG FROM_IMAGE=mcr.microsoft.com/dotnet/framework/sdk:4.8.1
 FROM ${FROM_IMAGE} AS certsgen
 RUN certutil -generateSSTFromWU roots.sst
 
