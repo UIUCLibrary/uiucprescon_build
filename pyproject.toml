@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0", 'wheel']
+requires = ["setuptools>=77.0.0", 'wheel']
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "uiucprescon.build"
 description = "Builder for python projects that require C or C++ dependencies or bindings"
 classifiers = [
-    "License :: OSI Approved :: University of Illinois/NCSA Open Source License",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -20,8 +19,8 @@ dependencies = [
     "conan",
     'toml'
 ]
-license = {text = "University of Illinois/NCSA Open Source License"}
 readme = "README.md"
+license = "NCSA"
 requires-python = ">=3.9"
 [tool.setuptools.dynamic]
 version = {attr = "uiucprescon.build.VERSION"}
@@ -59,3 +58,5 @@ disable = [
     "missing-class-docstring",
     "missing-function-docstring"
 ]
+[tool.ruff]
+line-length = 79
