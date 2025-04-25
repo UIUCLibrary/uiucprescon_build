@@ -302,13 +302,12 @@ class BuildConan(setuptools.Command):
         else:
             install_dir = build_ext.build_temp
         build_dir = os.path.join(build_clib.build_temp, "conan")
-        build_dir_full_path = os.path.abspath(build_dir)
         conan_cache = self.conan_cache
         if conan_cache and not os.path.exists(conan_cache):
             self.mkpath(conan_cache)
             self.announce(f"Created {conan_cache} for conan cache", 5)
-        if not os.path.exists(build_dir_full_path):
-            self.mkpath(build_dir_full_path)
+        if not os.path.exists(build_dir):
+            self.mkpath(build_dir)
         self.announce(f"Using {conan_cache} for conan cache", 5)
         metadata = build_deps_with_conan(
             conanfile=self.conanfile,
