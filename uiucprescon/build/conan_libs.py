@@ -301,6 +301,7 @@ class BuildConan(setuptools.Command):
                 )
         else:
             install_dir = build_ext.build_temp
+
         build_dir = os.path.join(build_clib.build_temp, "conan")
         conan_cache = self.conan_cache
         if conan_cache and not os.path.exists(conan_cache):
@@ -364,8 +365,8 @@ def build_conan(
     dist.parse_config_files()
 
     source_root = _get_source_root(dist)
-
-    command = BuildConan(dist)
+    command = dist.get_command_obj("build_conan")
+    command.ensure_finalized()
     command.conanfile = _find_conanfile(path=source_root)
     if metadata_directory is not None:
         build_py = cast(BuildPy, command.get_finalized_command("build_py"))
