@@ -395,7 +395,7 @@ def build_conan(
             conan_cache = os.path.join(conan_home, ".conan")
 
     if conan_cache is None:
-        os.path.join(
+        conan_cache = os.path.join(
             cast(
                 BuildExt, command.get_finalized_command("build_ext")
             ).build_temp,
@@ -403,6 +403,7 @@ def build_conan(
         )
 
     command.finalize_options()
+    command.conan_cache = conan_cache
     command.run()
 
 
