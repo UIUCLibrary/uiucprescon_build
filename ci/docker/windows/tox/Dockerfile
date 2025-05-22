@@ -1,9 +1,13 @@
 # escape=`
-ARG PIPX_HOME=c:\pipx
+ARG FROM_IMAGE=mcr.microsoft.com/dotnet/framework/sdk:4.8.1
+
 ARG VS_INSTALL_PATH="C:\BuildTools"
+
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
-ARG FROM_IMAGE=mcr.microsoft.com/dotnet/framework/sdk:4.8.1
+
+ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
+
 FROM ${FROM_IMAGE} AS certsgen
 RUN certutil -generateSSTFromWU roots.sst
 
@@ -11,14 +15,17 @@ FROM ${FROM_IMAGE} AS BASE_BUILDER
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-COPY ci/docker/windows/tox/msvc/startup.bat c:/startup/startup.bat
 COPY ci/docker/windows/tox/msvc/visual_studio_config.json c:/setup/config.vsconfig
 COPY ci/docker/windows/tox/msvc/install_msvc.ps1 c:/scripts/install_msvc.ps1
 ARG VS_INSTALL_PATH
+ARG VS_VERSION="2022"
+ARG VS_DevCmdArguments="-arch=amd64"
+ARG VS_DevPowershellArguments='-arch=amd64'
 
-RUN c:/scripts/install_msvc.ps1 ${Env:VS_INSTALL_PATH} c:/setup/config.vsconfig; `
-    Get-ChildItem C:\Users\ContainerAdministrator\AppData\Local\Temp | Remove-Item -Recurse -Force -Verbose
-ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
+RUN c:/scripts/install_msvc.ps1 -InstallPath ${Env:VS_INSTALL_PATH} -VSConfigFile c:/setup/config.vsconfig -DevCmdArguments ${Env:VS_DevCmdArguments} -DevPowershellArguments ${Env:VS_DevPowershellArguments} -VSVersion ${Env:VS_VERSION}; `
+    Write-Host "Note: Exporting This layer can take a while."
+
+ARG CHOCOLATEY_SOURCE
 ARG ChocolateyEnvironmentDebug=false
 ARG chocolateyVersion
 COPY ci/docker/windows/tox/chocolatey/install.ps1 c:/choco/install.ps1
@@ -33,18 +40,18 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     }; `
     Write-Host "Disabling Showing Download Progress" ; `
     choco feature disable -n=showDownloadProgress ; `
-    Remove-Item -Force -Recurse ${Env:TEMP}\*
+    choco cache remove --confirm
 
 COPY ci/docker/windows/tox/chocolatey/packages.xml choco/packages.config
-RUN C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress --verbose choco/packages.config ;`
-    Remove-Item C:\Users\ContainerAdministrator\AppData\Local\Temp\chocolatey -Recurse ; `
+COPY ci/docker/windows/tox/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
+RUN C:\ProgramData\chocolatey\bin\choco.exe sources ; `
+    C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
     refreshenv ; `
-    Remove-Item -Force -Recurse ${Env:TEMP}\* ; `
-    if (!(Test-Path 'C:\Program Files\Git\cmd\git.exe')) `
-    { `
-        throw 'git.exe not found' ; `
-    }; `
-    Write-Host "Finished install packages with Chocolatey"
+    choco cache remove --confirm;`
+    Write-Host "Finished install packages with Chocolatey" ;`
+    Write-Host "Verifying installed packages" ;`
+    $env:Path = [System.Environment]::GetEnvironmentVariable(\"Path\",\"Machine\") + \";\" + [System.Environment]::GetEnvironmentVariable(\"Path\",\"User\") ; `
+    c:/verifyenv.ps1
 
 COPY --from=certsgen c:/roots.sst roots.sst
 RUN certutil -addstore -f root roots.sst ; `
