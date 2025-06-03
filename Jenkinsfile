@@ -128,7 +128,7 @@ pipeline {
                                                trap "rm -rf bootstrap_uv" EXIT
                                                bootstrap_uv/bin/pip install --disable-pip-version-check uv
                                                bootstrap_uv/bin/uv venv  --python-preference=only-system  venv
-                                               bootstrap_uv/bin/uv pip install uv -r requirements-ci.txt --python venv
+                                               bootstrap_uv/bin/uv pip install uv -r requirements-dev.txt --python venv
                                                '''
                                            )
                                 sh(
@@ -498,13 +498,6 @@ pipeline {
                                             ).trim().split('\n')
                                         } finally{
                                             sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                            cleanWs(
-                                                patterns: [
-                                                    [pattern: 'venv/', type: 'INCLUDE'],
-                                                    [pattern: '.tox', type: 'INCLUDE'],
-                                                    [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                ]
-                                            )
                                         }
                                     }
                                     parallel(

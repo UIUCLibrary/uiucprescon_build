@@ -22,7 +22,7 @@ jobs:
       - name: Install requirements
         run: |
           pip install wheel
-          pip install -r requirements-ci.txt
+          pip install -r requirements-dev.txt
       - name: Run tox
         if: "!contains(matrix.os, 'windows')"
         run: tox -e py -vvv

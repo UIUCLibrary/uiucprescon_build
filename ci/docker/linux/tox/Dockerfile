@@ -16,9 +16,9 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
 
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
-COPY requirements-ci.txt /tmp/python_requirements/
+COPY requirements-dev.txt /tmp/python_requirements/
 COPY requirements/ /tmp/python_requirements/requirements/
-RUN python3 -m pip install pip --upgrade && pip3 install -r /tmp/python_requirements/requirements-ci.txt
+RUN python3 -m pip install pip --upgrade && pip3 install -r /tmp/python_requirements/requirements-dev.txt
 
 ARG PIP_DOWNLOAD_CACHE
 RUN mkdir -p ${PIP_DOWNLOAD_CACHE} && \
