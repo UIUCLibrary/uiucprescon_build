@@ -326,7 +326,7 @@ pipeline {
                                                 sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                 envs = sh(
                                                     label: 'Get tox environments',
-                                                    script: './venv/bin/uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                    script: './venv/bin/uvx --quiet --constraint requirements-dev.txt --with tox-uv tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\n')
                                             } finally{
@@ -363,19 +363,12 @@ pipeline {
                                                                             sh( label: 'Running Tox',
                                                                                 script: """python3 -m venv venv --clear
                                                                                             ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                           ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} -vvv
+                                                                                           ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
                                                                                         """
                                                                                 )
                                                                         }
                                                                     } finally{
                                                                         sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                                                        cleanWs(
-                                                                            patterns: [
-                                                                                [pattern: 'venv/', type: 'INCLUDE'],
-                                                                                [pattern: '.tox', type: 'INCLUDE'],
-                                                                                [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                                            ]
-                                                                        )
                                                                     }
                                                                 }
                                                             }
@@ -412,7 +405,7 @@ pipeline {
                                                 bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
                                                 envs = bat(
                                                     label: 'Get tox environments',
-                                                    script: '@.\\venv\\Scripts\\uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                    script: '@.\\venv\\Scripts\\uvx --quiet --constraint requirements-dev.txt --with tox-uv tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\r\n')
                                             } catch(e) {
@@ -452,7 +445,7 @@ pipeline {
                                                                     bat(label: 'Running Tox',
                                                                         script: """python -m venv venv --clear && venv\\Scripts\\pip --disable-pip-version-check install uv
                                                                                    venv\\Scripts\\uv python install cpython-${version}
-                                                                                   venv\\Scripts\\uvx -p ${version} --with tox-uv tox run -e ${toxEnv} -vv
+                                                                                   venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
                                                                                    rmdir /s/q venv
                                                                                    rmdir /s/q .tox
                                                                             """
@@ -493,7 +486,7 @@ pipeline {
                                             sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                             envs = sh(
                                                 label: 'Get tox environments',
-                                                script: './venv/bin/uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                script: './venv/bin/uvx --quiet --constraint requirements-dev.txt --with tox-uv tox list -d --no-desc',
                                                 returnStdout: true,
                                             ).trim().split('\n')
                                         } finally{
@@ -514,7 +507,7 @@ pipeline {
                                                             try{
                                                                 sh( label: 'Running Tox',
                                                                     script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
-                                                                               ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} -vvv
+                                                                               ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
                                                                             """
                                                                     )
                                                             } catch(e) {
