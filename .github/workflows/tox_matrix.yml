@@ -5,12 +5,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2019]
+        os: [ubuntu-latest, macos-latest, windows-2025]
         python-version: ['3.9', '3.10', '3.11', '3.12']
-        include:
-          - os: macos-latest
-          - os: ubuntu-latest
-          - os: windows-2019
       fail-fast: false
     name: Python ${{ matrix.python-version }} ${{ matrix.os }} build
     steps:
@@ -30,6 +26,6 @@ jobs:
         if: contains(matrix.os, 'windows')
         shell: cmd
         run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2025\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cl
           tox -e py
