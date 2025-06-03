@@ -320,24 +320,18 @@ pipeline {
                                 script{
                                     def envs = []
                                     node('docker && linux'){
-                                        docker.image('python').inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
-                                            try{
-                                                checkout scm
+                                        try{
+                                            checkout scm
+                                            docker.image('python').inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
                                                 sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                 envs = sh(
                                                     label: 'Get tox environments',
                                                     script: './venv/bin/uvx --quiet --constraint requirements-dev.txt --with tox-uv tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\n')
-                                            } finally{
-                                                cleanWs(
-                                                    patterns: [
-                                                        [pattern: 'venv/', type: 'INCLUDE'],
-                                                        [pattern: '.tox', type: 'INCLUDE'],
-                                                        [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                    ]
-                                                )
                                             }
+                                        } finally{
+                                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                         }
                                     }
                                     parallel(
@@ -346,18 +340,18 @@ pipeline {
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
-                                                    node('docker && linux'){
-                                                        checkout scm
-                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
-                                                        try{
-                                                            withEnv([
-                                                                'PIP_CACHE_DIR=/tmp/pipcache',
-                                                                'UV_INDEX_STRATEGY=unsafe-best-match',
-                                                                'UV_TOOL_DIR=/tmp/uvtools',
-                                                                'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
-                                                                'UV_CACHE_DIR=/tmp/uvcache',
-                                                            ]){
-                                                                retry(3){
+                                                    retry(3){
+                                                        node('docker && linux'){
+                                                            checkout scm
+                                                            def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
+                                                            try{
+                                                                withEnv([
+                                                                    'PIP_CACHE_DIR=/tmp/pipcache',
+                                                                    'UV_INDEX_STRATEGY=unsafe-best-match',
+                                                                    'UV_TOOL_DIR=/tmp/uvtools',
+                                                                    'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
+                                                                    'UV_CACHE_DIR=/tmp/uvcache',
+                                                                ]){
                                                                     try{
                                                                         image.inside('--mount source=python-tox-tmp-pykdu,target=/tmp'){
                                                                             sh( label: 'Running Tox',
@@ -371,9 +365,9 @@ pipeline {
                                                                         sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                                     }
                                                                 }
+                                                            } finally {
+                                                                sh "docker rmi --no-prune ${image.id}"
                                                             }
-                                                        } finally {
-                                                            sh "docker rmi --no-prune ${image.id}"
                                                         }
                                                     }
                                                 }
@@ -399,32 +393,18 @@ pipeline {
                                 script{
                                     def envs = []
                                     node('docker && windows'){
-                                        docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python').inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
-                                            try{
-                                                checkout scm
+                                        checkout scm
+                                        try{
+                                            docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python').inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
                                                 bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
                                                 envs = bat(
                                                     label: 'Get tox environments',
                                                     script: '@.\\venv\\Scripts\\uvx --quiet --constraint requirements-dev.txt --with tox-uv tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\r\n')
-                                            } catch(e) {
-                                                if( fileExists('venv')){
-                                                    bat 'dir venv'
-                                                }
-                                                if (fileExists('venv\\Scripts')){
-                                                    bat 'dir venv\\Scripts'
-                                                }
-                                                throw e
-                                            } finally{
-                                                cleanWs(
-                                                    patterns: [
-                                                        [pattern: 'venv/', type: 'INCLUDE'],
-                                                        [pattern: '.tox/', type: 'INCLUDE'],
-                                                        [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                    ]
-                                                )
                                             }
+                                        } finally{
+                                            bat "${tool(name: 'Default', type: 'git')} clean -dfx"
                                         }
                                     }
                                     parallel(
@@ -434,34 +414,30 @@ pipeline {
                                                 "Tox Environment: ${toxEnv}",
                                                 {
                                                     node('docker && windows'){
-                                                        checkout scm
-                                                        def image
-                                                        lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                            image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
-                                                        }
-                                                        try{
-                                                            image.inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
-                                                                retry(3){
-                                                                    bat(label: 'Running Tox',
-                                                                        script: """python -m venv venv --clear && venv\\Scripts\\pip --disable-pip-version-check install uv
-                                                                                   venv\\Scripts\\uv python install cpython-${version}
-                                                                                   venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
-                                                                                   rmdir /s/q venv
-                                                                                   rmdir /s/q .tox
-                                                                            """
-                                                                    )
-                                                                }
+                                                        retry(3){
+                                                            checkout scm
+                                                            def image
+                                                            lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
                                                             }
-                                                        } finally{
-                                                            bat "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                                            bat "docker rmi --no-prune ${image.id}"
-                                                            cleanWs(
-                                                                patterns: [
-                                                                    [pattern: 'venv/', type: 'INCLUDE'],
-                                                                    [pattern: '.tox', type: 'INCLUDE'],
-                                                                    [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                                ]
-                                                            )
+                                                            try{
+                                                                try{
+                                                                    image.inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
+                                                                        bat(label: 'Running Tox',
+                                                                            script: """python -m venv venv --clear && venv\\Scripts\\pip --disable-pip-version-check install uv
+                                                                                       venv\\Scripts\\uv python install cpython-${version}
+                                                                                       venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
+                                                                                       rmdir /s/q venv
+                                                                                       rmdir /s/q .tox
+                                                                                """
+                                                                        )
+                                                                    }
+                                                                } finally {
+                                                                    bat "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                                                }
+                                                            } finally{
+                                                                bat "docker rmi --no-prune ${image.id}"
+                                                            }
                                                         }
                                                     }
                                                 }
