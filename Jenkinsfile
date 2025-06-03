@@ -69,15 +69,7 @@ def getMacToxTestsParallel(args = [:]){
                                 )
 
                         } finally {
-                            cleanWs(
-                                notFailBuild: true,
-                                deleteDirs: true,
-                                patterns: [
-                                    [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                    [pattern: 'venv/', type: 'INCLUDE'],
-                                    [pattern: '.tox/', type: 'INCLUDE'],
-                                ]
-                            )
+                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                         }
                     }
                 }
@@ -498,13 +490,6 @@ pipeline {
                                                                 throw e
                                                             } finally{
                                                                 sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                                                cleanWs(
-                                                                    patterns: [
-                                                                        [pattern: 'venv/', type: 'INCLUDE'],
-                                                                        [pattern: '.tox', type: 'INCLUDE'],
-                                                                        [pattern: '**/__pycache__/', type: 'INCLUDE'],
-                                                                    ]
-                                                                )
                                                             }
                                                         }
                                                     }
