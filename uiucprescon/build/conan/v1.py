@@ -19,7 +19,7 @@ from conans.client import conan_api, conf   # pylint: disable=import-error
 
 from uiucprescon.build.utils import locate_file
 from uiucprescon.build.compiler_info import (  # pylint: disable=import-error
-    get_compiler_name
+    get_compiler_name, get_compiler_version
 )
 from .files import ConanBuildInfoTXT
 
@@ -43,6 +43,28 @@ def build_deps_with_conan(
     conan = conan_api.Conan(
         cache_folder=os.path.abspath(conan_cache) if conan_cache else None
     )
+    settings_yaml = os.path.join(conan.cache_folder, "settings.yml")
+    if not os.path.exists(settings_yaml):
+        # This can be updated
+        import yaml
+
+        # This is a hack to create the settings.yml file
+        conan.config_get("storage.path")
+
+        # This has the site effect for generating the settings.yml file
+        conan.app.cache.settings.copy()
+        with open(settings_yaml, "r") as f:
+            settings_data = yaml.load(f.read(), Loader=yaml.SafeLoader)
+
+        default_compiler = conan.app.cache.default_profile.settings['compiler']
+        settings_data['compiler'][default_compiler]['version'].append(
+            conan.app.cache.default_profile.settings['compiler.version']
+        )
+        settings_data['compiler'][default_compiler]['version'].append(get_compiler_version())
+
+        with open(settings_yaml, "w") as f:
+            yaml.dump(settings_data, f, default_flow_style=False, sort_keys=False)
+
     settings = []
     logger = logging.Logger(__name__)
     conan_profile_cache = os.path.join(build_dir, "profiles")
