@@ -68,19 +68,40 @@ def build_deps_with_conan(
 
     root_node = conan_api.graph._load_root_consumer_conanfile(
         conanfile, profile_host, profile_build
-    )
-    deps_graph = conan_api.graph.load_graph(
-        root_node, profile_build=profile_build, profile_host=profile_host
+    import yaml
+    settings_yaml = os.path.join(conan_cache, "settings.yml")
+    did_settings_yaml_already_exist = os.path.exists(settings_yaml)
+    conan_api = ConanAPI(
+        os.path.abspath(conan_cache) if conan_cache is not None else None
     )
 
-    conan_api.graph.analyze_binaries(
-        deps_graph, build_mode=["missing"], remotes=remotes
-    )
-    conan_api.install.install_binaries(deps_graph, remotes)
-    data: Dict[str, DependencyMetadata] = {}
-    for dep in deps_graph.root.dependencies:
-        conan_file = dep.dst.conanfile
-        data = {**data, **conan_file.cpp_info.serialize()}
+    if not did_settings_yaml_already_exist:
+        with open(settings_yaml, "r") as f:
+            settings_data = yaml.load(f.read(), Loader=yaml.SafeLoader)
+        default_profile_settings = conan_api.profiles.detect().settings
+        default_compiler = default_profile_settings['compiler']
+        settings_data['compiler'][default_compiler]['version'].append(
+            default_profile_settings['compiler.version'].value
+        )
+        settings_data['compiler'][default_compiler]['version'].append(get_compiler_version())
+
+        with open(settings_yaml, "w") as f:
+            yaml.dump(settings_data, f, default_flow_style=False, sort_keys=False)
+
+    build_json = os.path.join(build_dir, "conan_build_info.json")
+    if not os.path.exists(build_json):
+        build_json = _build_deps(
+            conan_cache,
+            conanfile,
+            build_dir,
+            build,
+            compiler_version,
+            target_os_version,
+            compiler_libcxx,
+            arch,
+            verbose,
+            debug
+        )
 
     return extract_metadata(data)
 
