@@ -49,6 +49,7 @@ def get_visual_studio_version() -> str:
         "14.0",
         "15.0",
         "16.0",
+        "17.0",
     ]
     installed_versions = []
     key = r"SOFTWARE\Microsoft\VisualStudio\%s"
