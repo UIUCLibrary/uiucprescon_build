@@ -255,7 +255,7 @@ pipeline {
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
-                                                    retry(3){
+                                                    retry(1){
                                                         node('docker && linux'){
                                                             checkout scm
                                                             def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
@@ -329,7 +329,7 @@ pipeline {
                                                 "Tox Environment: ${toxEnv}",
                                                 {
                                                     node('docker && windows'){
-                                                        retry(3){
+                                                        retry(1){
                                                             checkout scm
                                                             def image
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
