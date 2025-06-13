@@ -4,83 +4,6 @@ library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
    ])
 
 
-def getMacToxTestsParallel(args = [:]){
-    def nodeLabel = args['label']
-    args.remove('label')
-
-    def envNamePrefix = args['envNamePrefix']
-    args.remove('envNamePrefix')
-
-    def retries = args.get('retry', 1)
-    if(args.containsKey('retry')){
-        args.remove('retry')
-    }
-    if(args.size() > 0){
-        error "getMacToxTestsParallel has invalid arguments ${args.keySet()}"
-    }
-
-    //    =============================================
-    def envs = [:]
-    node(nodeLabel){
-        try{
-            checkout scm
-            sh(
-                script: '''python3 -m venv venv --upgrade-deps
-                    venv/bin/pip install tox
-                    '''
-            )
-            def toxEnvs = sh(
-                    label: 'Getting Tox Environments',
-                    returnStdout: true,
-                    script: 'venv/bin/tox list -d --no-desc'
-                ).trim().split('\n')
-            toxEnvs.each({env ->
-                def requiredPythonVersion = sh(
-                    label: "Getting required python version for Tox Environment: ${env}",
-                    script: "venv/bin/tox config -e  ${env} -k py_dot_ver  | grep  'py_dot_ver =' | sed -E 's/py_dot_ver = ([0-9].[0-9]+)/\\1/g'",
-                    returnStdout: true
-                ).trim()
-                envs[env] = requiredPythonVersion
-            })
-
-
-        } finally {
-            sh 'rm -rf venv'
-        }
-    }
-    echo "Found tox environments for ${envs.keySet().join(', ')}"
-    def jobs = envs.collectEntries({ toxEnv, requiredPythonVersion ->
-        def jenkinsStageName = "${envNamePrefix} ${toxEnv}"
-        def jobNodeLabel = "${nodeLabel} && python${requiredPythonVersion}"
-        if(nodesByLabel(jobNodeLabel).size() > 0){
-            [jenkinsStageName,{
-                retry(retries){
-                    node(jobNodeLabel){
-                        try{
-                            checkout scm
-                            sh(
-                                script: '''python3 -m venv venv --upgrade-deps
-                                    venv/bin/pip install tox
-                                    '''
-                            )
-                            sh(
-                                label: 'Getting Tox Environments',
-                                script: "venv/bin/tox --list-dependencies --workdir=.tox run -e ${toxEnv}"
-                                )
-
-                        } finally {
-                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                        }
-                    }
-                }
-
-            }]
-        } else {
-            echo "Unable to add ${toxEnv} because no nodes with required labels: ${jobNodeLabel}"
-        }
-    })
-    return jobs
-}
 pipeline {
     agent none
     options {
@@ -345,7 +268,7 @@ pipeline {
                                                                     'UV_CACHE_DIR=/tmp/uvcache',
                                                                 ]){
                                                                     try{
-                                                                        image.inside('--mount source=python-tox-tmp-pykdu,target=/tmp'){
+                                                                        image.inside{
                                                                             sh( label: 'Running Tox',
                                                                                 script: """python3 -m venv venv --clear
                                                                                             ./venv/bin/pip install --disable-pip-version-check uv
