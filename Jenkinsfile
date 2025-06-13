@@ -10,6 +10,7 @@ pipeline {
         timeout(time: 1, unit: 'DAYS')
     }
     parameters{
+        booleanParam(name: 'RUN_CHECKS', defaultValue: true, description: 'Run checks on code')
         booleanParam(name: 'TEST_RUN_TOX', defaultValue: false, description: 'Run Tox Tests')
     }
     stages{
@@ -86,6 +87,10 @@ pipeline {
                             }
                         }
                         stage('Code Quality') {
+                            when{
+                                equals expected: true, actual: params.RUN_CHECKS
+                                beforeAgent true
+                            }
                             stages{
                                 stage('Run Checks'){
                                     parallel{
