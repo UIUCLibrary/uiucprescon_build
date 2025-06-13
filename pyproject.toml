@@ -17,7 +17,8 @@ dependencies = [
     "cmake",
     'pybind11~=2.10.1',
     "conan",
-    'toml'
+    'toml',
+    'PyYAML'
 ]
 readme = "README.md"
 license = "NCSA"
