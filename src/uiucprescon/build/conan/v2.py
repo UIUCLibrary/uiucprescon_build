@@ -24,7 +24,6 @@ from .utils import copy_conan_imports_from_manifest
 from conan.api.conan_api import ConanAPI
 from conan.cli.cli import Cli
 from conan.cli.formatters.graph.graph_info_text import filter_graph
-from conan.errors import ConanException
 
 import dataclasses
 
@@ -173,6 +172,7 @@ def _build_deps(
         f.write(json.dumps({"graph": serial}, indent=4))
     return build_json
 
+
 def get_msvc_compiler_version():
     cl = shutil.which("cl.exe")
     if not cl:
@@ -190,14 +190,23 @@ int main(){
 }
 """.lstrip())
         try:
-            subprocess.check_call([cl, test_source_file, f"/Fe:{exec_file}"])
+            subprocess.check_call(
+                [cl, test_source_file, f"/Fe:{exec_file}"]
+            )
         except subprocess.CalledProcessError as e:
-            print("Failed to compile with MSVC compiler. Here is the environment complied with.")
+            print("Failed to compile with MSVC compiler. "
+                  "Here is the environment complied with.")
             pprint.pprint(dict(os.environ))
             raise e
-        result = subprocess.run([exec_file], shell=False, capture_output=True, check=True)
+        result = subprocess.run(
+            [exec_file],
+            shell=False,
+            capture_output=True,
+            check=True
+        )
         assert int(result.stdout), f"not a valid version: {result.stdout}"
         return result.stdout[:3]
+
 
 def build_deps_with_conan(
     conanfile: str,
@@ -230,7 +239,8 @@ def build_deps_with_conan(
             default_profile_settings["compiler.version"].value
         )
         settings_data["compiler"][default_compiler]["version"].append(
-            get_msvc_compiler_version() if default_compiler == "msvc" else get_compiler_version()
+            get_msvc_compiler_version() if default_compiler == "msvc"
+            else get_compiler_version()
         )
 
         with open(settings_yaml, "w") as f:
