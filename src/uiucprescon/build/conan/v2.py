@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import pprint
 import subprocess
 import shutil
 import tempfile
@@ -188,7 +189,12 @@ int main(){
     return 0;
 }
 """.lstrip())
-        subprocess.check_call([cl, test_source_file, f"/Fe:{exec_file}"])
+        try:
+            subprocess.check_call([cl, test_source_file, f"/Fe:{exec_file}"])
+        except subprocess.CalledProcessError as e:
+            print("Failed to compile with MSVC compiler. Here is the environment complied with.")
+            pprint.pprint(dict(os.environ))
+            raise e
         result = subprocess.run([exec_file], shell=False, capture_output=True, check=True)
         assert int(result.stdout), f"not a valid version: {result.stdout}"
         return result.stdout[:3]
