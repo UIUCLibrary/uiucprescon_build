@@ -100,7 +100,7 @@ pipeline {
                                                     sh(
                                                         label: 'Run pydocstyle',
                                                         script: '''. ./venv/bin/activate
-                                                                   pydocstyle uiucprescon > reports/pydocstyle-report.txt
+                                                                   pydocstyle src > reports/pydocstyle-report.txt
                                                                 '''
                                                     )
                                                 }
@@ -120,7 +120,7 @@ pipeline {
                                                     sh(
                                                         label: 'Running Pytest',
                                                         script:'''. ./venv/bin/activate
-                                                                  coverage run --parallel-mode --source=uiucprescon -m pytest --junitxml=reports/pytest.xml
+                                                                  coverage run --parallel-mode --source=src -m pytest --junitxml=reports/pytest.xml
                                                                   '''
                                                    )
                                                }
@@ -140,7 +140,7 @@ pipeline {
                                                     catchError(buildResult: 'SUCCESS', message: 'Pylint found issues', stageResult: 'UNSTABLE') {
                                                         sh(label: 'Running pylint',
                                                             script: '''. ./venv/bin/activate
-                                                                       pylint uiucprescon.build -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
+                                                                       pylint src -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
                                                                     '''
 
                                                         )
@@ -159,7 +159,7 @@ pipeline {
                                                 catchError(buildResult: 'SUCCESS', message: 'flake8 found some warnings', stageResult: 'UNSTABLE') {
                                                     sh(label: 'Running flake8',
                                                        script: '''. ./venv/bin/activate
-                                                                  flake8 uiucprescon --tee --output-file=logs/flake8.log
+                                                                  flake8 src --tee --output-file=logs/flake8.log
                                                                '''
                                                     )
                                                 }
