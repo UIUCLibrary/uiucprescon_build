@@ -4,6 +4,7 @@ import subprocess
 import sys
 import shutil
 import abc
+from importlib.metadata import version
 import typing
 from typing import Dict, List, Optional, cast, Set, Tuple, Union
 import setuptools
@@ -216,6 +217,7 @@ class BuildConan(setuptools.Command):
         ("conan-cache=", None, "conan cache directory"),
         ("compiler-version=", None, "Compiler version"),
         ("compiler-libcxx=", None, "Compiler libcxx"),
+        ("target-os-version=", None, "Target OS version"),
     ]
 
     description = "Get the required dependencies from a Conan package manager"
@@ -224,11 +226,14 @@ class BuildConan(setuptools.Command):
         self.conan_cache: Optional[str] = None
         self.compiler_version: Optional[str] = None
         self.compiler_libcxx: Optional[str] = None
+        self.target_os_version: Optional[str] = None
+        self.build_libs: List[str] = ['missing']
         self.conanfile: Optional[str] = None
+        self.arch = None
 
     def __init__(self, dist: setuptools.dist.Distribution, **kw: str) -> None:
         self.install_libs = True
-        self.build_libs = ["outdated"]
+        self.build_libs = []
         super().__init__(dist, **kw)
 
     def finalize_options(self) -> None:
@@ -237,16 +242,31 @@ class BuildConan(setuptools.Command):
                 BuildExt, self.get_finalized_command("build_ext")
             )
             build_dir = build_ext_cmd.build_temp
-
-            self.conan_cache = os.path.join(
-                os.environ.get("CONAN_USER_HOME", build_dir), ".conan"
-            )
+            if version("conan") < "2.0.0":
+                self.conan_cache = os.path.join(
+                    os.environ.get("CONAN_USER_HOME", build_dir), ".conan"
+                )
+            else:
+                self.conan_cache = os.path.join(
+                    os.environ.get("CONAN_USER_HOME", build_dir), ".conan2"
+                )
         if self.compiler_libcxx is None:
             self.compiler_libcxx = os.getenv("CONAN_COMPILER_LIBCXX")
         if self.compiler_version is None:
-            self.compiler_version = os.getenv(
-                "CONAN_COMPILER_VERSION", get_compiler_version()
-            )
+            # This function section is ugly and should be refactored
+            if version("conan") < "2.0.0":
+                self.compiler_version = os.getenv(
+                    "CONAN_COMPILER_VERSION", get_compiler_version()
+                )
+            else:
+                build_ext_cmd = (
+                    cast(BuildExt, self.get_finalized_command("build_ext"))
+                )
+
+                build_ext_cmd.setup_shlib_compiler()
+                if build_ext_cmd.shlib_compiler.compiler_type == "msvc":
+                    from .conan.v2 import get_msvc_compiler_version
+                    self.compiler_version = get_msvc_compiler_version()
 
     def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
         for root, dirs, files in os.walk(root_dir):
@@ -292,7 +312,8 @@ class BuildConan(setuptools.Command):
                 build_py = cast(
                     BuildPy, self.get_finalized_command("build_py")
                 )
-                # FIXME: This breaks if the source folder from the package is located in a src directory
+                # FIXME: This breaks if the source folder from the package is
+                #  located in a src directory
                 install_dir = os.path.abspath(
                     os.path.join(
                         build_py.build_lib,
@@ -310,12 +331,20 @@ class BuildConan(setuptools.Command):
         if not os.path.exists(build_dir_full_path):
             self.mkpath(build_dir_full_path)
         self.announce(f"Using {conan_cache} for conan cache", 5)
+        conanfile = (
+            self.conanfile or
+            _find_conanfile(path='.') or
+            os.path.abspath('.')
+        )
         metadata = build_deps_with_conan(
-            conanfile=self.conanfile,
+            conanfile=conanfile,
             build_dir=build_dir,
             install_dir=os.path.abspath(install_dir),
             compiler_libcxx=self.compiler_libcxx,
             compiler_version=self.compiler_version,
+            target_os_version=self.target_os_version,
+            arch=self.arch,
+            build=self.build_libs if len(self.build_libs) > 0 else None,
             conan_options=get_conan_options(),
             conan_cache=conan_cache,
             install_libs=self.install_libs,
@@ -347,7 +376,7 @@ def _get_source_root(dist: Distribution) -> str:
 
 
 def _find_conanfile(path: str) -> Optional[str]:
-    conanfile_types = ["conanfile.py"]
+    conanfile_types = ["conanfile.py", "conanfile.txt"]
     for conanfile_type in conanfile_types:
         conanfile = os.path.join(path, conanfile_type)
         if os.path.exists(conanfile):
@@ -386,7 +415,13 @@ def build_conan(
     if config_settings:
         conan_cache = config_settings.get("conan_cache")
         command.conan_cache = conan_cache
+
+        command.target_os_version = config_settings.get("target_os_version")
+        if not command.target_os_version:
+            command.target_os_version = os.getenv("MACOSX_DEPLOYMENT_TARGET")
+
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
+        command.arch = config_settings.get("arch")
         command.compiler_version = config_settings.get(
             "conan_compiler_version", get_compiler_version()
         )
@@ -421,6 +456,8 @@ def build_deps_with_conan(
     compiler_version: str,
     conan_cache: Optional[str] = None,
     conan_options: Optional[List[str]] = None,
+    target_os_version: Optional[str] = None,
+    arch: Optional[str] = None,
     debug: bool = False,
     install_libs=True,
     build=None,
@@ -432,11 +469,13 @@ def build_deps_with_conan(
         install_dir,
         compiler_libcxx,
         compiler_version,
+        build if build is not None else [],
         conan_cache,
         conan_options,
+        target_os_version,
+        arch,
         debug,
         install_libs,
-        build,
         announce,
     )
 

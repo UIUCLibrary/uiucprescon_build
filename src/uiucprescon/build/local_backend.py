@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import setuptools.build_meta
@@ -15,6 +16,17 @@ def build_sdist(
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> str:
     return setuptools.build_meta.build_sdist(sdist_directory, config_settings)
+
+
+@contextlib.contextmanager
+def set_env_var(env_vars: Dict[str, str]):
+    """Set an environment variable."""
+    og = os.environ.copy()
+    try:
+        os.environ.update(env_vars)
+        yield
+    finally:
+        os.environ = og
 
 
 def build_wheel(
@@ -39,26 +51,20 @@ def build_wheel(
         metadata_directory,
         install_libs=False,
     )
-    original_conan_user_home = os.getenv("CONAN_USER_HOME")
-
-    try:
-        if config_settings is not None and "conan_cache" in config_settings:
-            os.environ["CONAN_USER_HOME"] = os.path.normpath(
+    env_vars = {}
+    if config_settings is not None:
+        if "conan_cache" in config_settings:
+            env_vars["CONAN_USER_HOME"] = os.path.normpath(
                 os.path.join(cast(str, config_settings["conan_cache"]), "..")
             )
-
+        if "target_os_version" in config_settings:
+            if platform.system() == "Darwin":
+                env_vars["MACOSX_DEPLOYMENT_TARGET"] =\
+                    config_settings["target_os_version"]
+    with set_env_var(env_vars):
         return setuptools.build_meta.build_wheel(
             wheel_directory, config_settings, metadata_directory
         )
-
-    finally:
-        if original_conan_user_home:
-            os.environ["CONAN_USER_HOME"] = original_conan_user_home
-        else:
-            try:
-                os.unsetenv("CONAN_USER_HOME")
-            except AttributeError:
-                pass
 
 
 def get_requires_for_build_sdist(

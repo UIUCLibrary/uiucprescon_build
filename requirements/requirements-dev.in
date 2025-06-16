@@ -11,3 +11,4 @@ pylint
 sphinx
 tox
 types-toml
+types-pyyaml

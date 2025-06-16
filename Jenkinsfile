@@ -4,89 +4,13 @@ library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
    ])
 
 
-def getMacToxTestsParallel(args = [:]){
-    def nodeLabel = args['label']
-    args.remove('label')
-
-    def envNamePrefix = args['envNamePrefix']
-    args.remove('envNamePrefix')
-
-    def retries = args.get('retry', 1)
-    if(args.containsKey('retry')){
-        args.remove('retry')
-    }
-    if(args.size() > 0){
-        error "getMacToxTestsParallel has invalid arguments ${args.keySet()}"
-    }
-
-    //    =============================================
-    def envs = [:]
-    node(nodeLabel){
-        try{
-            checkout scm
-            sh(
-                script: '''python3 -m venv venv --upgrade-deps
-                    venv/bin/pip install tox
-                    '''
-            )
-            def toxEnvs = sh(
-                    label: 'Getting Tox Environments',
-                    returnStdout: true,
-                    script: 'venv/bin/tox list -d --no-desc'
-                ).trim().split('\n')
-            toxEnvs.each({env ->
-                def requiredPythonVersion = sh(
-                    label: "Getting required python version for Tox Environment: ${env}",
-                    script: "venv/bin/tox config -e  ${env} -k py_dot_ver  | grep  'py_dot_ver =' | sed -E 's/py_dot_ver = ([0-9].[0-9]+)/\\1/g'",
-                    returnStdout: true
-                ).trim()
-                envs[env] = requiredPythonVersion
-            })
-
-
-        } finally {
-            sh 'rm -rf venv'
-        }
-    }
-    echo "Found tox environments for ${envs.keySet().join(', ')}"
-    def jobs = envs.collectEntries({ toxEnv, requiredPythonVersion ->
-        def jenkinsStageName = "${envNamePrefix} ${toxEnv}"
-        def jobNodeLabel = "${nodeLabel} && python${requiredPythonVersion}"
-        if(nodesByLabel(jobNodeLabel).size() > 0){
-            [jenkinsStageName,{
-                retry(retries){
-                    node(jobNodeLabel){
-                        try{
-                            checkout scm
-                            sh(
-                                script: '''python3 -m venv venv --upgrade-deps
-                                    venv/bin/pip install tox
-                                    '''
-                            )
-                            sh(
-                                label: 'Getting Tox Environments',
-                                script: "venv/bin/tox --list-dependencies --workdir=.tox run -e ${toxEnv}"
-                                )
-
-                        } finally {
-                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                        }
-                    }
-                }
-
-            }]
-        } else {
-            echo "Unable to add ${toxEnv} because no nodes with required labels: ${jobNodeLabel}"
-        }
-    })
-    return jobs
-}
 pipeline {
     agent none
     options {
         timeout(time: 1, unit: 'DAYS')
     }
     parameters{
+        booleanParam(name: 'RUN_CHECKS', defaultValue: true, description: 'Run checks on code')
         booleanParam(name: 'TEST_RUN_TOX', defaultValue: false, description: 'Run Tox Tests')
     }
     stages{
@@ -163,6 +87,10 @@ pipeline {
                             }
                         }
                         stage('Code Quality') {
+                            when{
+                                equals expected: true, actual: params.RUN_CHECKS
+                                beforeAgent true
+                            }
                             stages{
                                 stage('Run Checks'){
                                     parallel{
@@ -172,7 +100,7 @@ pipeline {
                                                     sh(
                                                         label: 'Run pydocstyle',
                                                         script: '''. ./venv/bin/activate
-                                                                   pydocstyle uiucprescon > reports/pydocstyle-report.txt
+                                                                   pydocstyle src > reports/pydocstyle-report.txt
                                                                 '''
                                                     )
                                                 }
@@ -192,7 +120,7 @@ pipeline {
                                                     sh(
                                                         label: 'Running Pytest',
                                                         script:'''. ./venv/bin/activate
-                                                                  coverage run --parallel-mode --source=uiucprescon -m pytest --junitxml=reports/pytest.xml
+                                                                  coverage run --parallel-mode --source=src -m pytest --junitxml=reports/pytest.xml
                                                                   '''
                                                    )
                                                }
@@ -212,7 +140,7 @@ pipeline {
                                                     catchError(buildResult: 'SUCCESS', message: 'Pylint found issues', stageResult: 'UNSTABLE') {
                                                         sh(label: 'Running pylint',
                                                             script: '''. ./venv/bin/activate
-                                                                       pylint uiucprescon.build -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
+                                                                       pylint src -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
                                                                     '''
 
                                                         )
@@ -231,7 +159,7 @@ pipeline {
                                                 catchError(buildResult: 'SUCCESS', message: 'flake8 found some warnings', stageResult: 'UNSTABLE') {
                                                     sh(label: 'Running flake8',
                                                        script: '''. ./venv/bin/activate
-                                                                  flake8 uiucprescon --tee --output-file=logs/flake8.log
+                                                                  flake8 src --tee --output-file=logs/flake8.log
                                                                '''
                                                     )
                                                 }
@@ -332,7 +260,7 @@ pipeline {
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
-                                                    retry(3){
+                                                    retry(1){
                                                         node('docker && linux'){
                                                             checkout scm
                                                             def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
@@ -345,7 +273,7 @@ pipeline {
                                                                     'UV_CACHE_DIR=/tmp/uvcache',
                                                                 ]){
                                                                     try{
-                                                                        image.inside('--mount source=python-tox-tmp-pykdu,target=/tmp'){
+                                                                        image.inside{
                                                                             sh( label: 'Running Tox',
                                                                                 script: """python3 -m venv venv --clear
                                                                                             ./venv/bin/pip install --disable-pip-version-check uv
@@ -406,7 +334,7 @@ pipeline {
                                                 "Tox Environment: ${toxEnv}",
                                                 {
                                                     node('docker && windows'){
-                                                        retry(3){
+                                                        retry(1){
                                                             checkout scm
                                                             def image
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){

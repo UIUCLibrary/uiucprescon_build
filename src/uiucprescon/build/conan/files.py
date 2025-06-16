@@ -1,4 +1,6 @@
 import io
+import os
+import json
 from typing import List, Dict, TypedDict, Iterable, Optional
 import abc
 import warnings
@@ -146,3 +148,58 @@ def locate_conanbuildinfo_json(search_locations: List[str]) -> Optional[str]:
         category=DeprecationWarning,
     )
     return locate_file("conanbuildinfo.json", search_locations)
+
+
+def read_conan_build_info_json(fp: io.TextIOWrapper):
+    definitions: List[str] = []
+    include_paths: List[str] = []
+    lib_dirs: List[str] = []
+    bin_paths: List[str] = []
+    libs: List[str] = []
+    data = json.loads(fp.read())
+    for node in data['graph']['nodes'].values():
+        if node.get('name') is None:
+            continue
+        for data in node.get('cpp_info', {}).values():
+            include_paths += [
+                include_path for include_path
+                in data.get("includedirs", []) or []
+                if all([
+                    include_path not in include_paths,
+                    os.path.exists(include_path)
+                ])
+            ]
+
+            definitions += [
+                define for define in data.get("defines", []) or []
+                if define not in definitions
+            ]
+
+            lib_dirs += [
+                lib_dir for lib_dir in data.get("libdirs", []) or []
+                if all([
+                    lib_dir not in lib_dirs,
+                    os.path.exists(lib_dir)
+                ])
+            ]
+
+            bin_paths += [
+                bindir for bindir in data.get("bindirs", []) or []
+                if all([
+                    bindir not in bin_paths,
+                    os.path.exists(bindir)
+                ])
+            ]
+
+            libs += [
+                lib for lib in data.get("libs", []) or []
+                if lib not in libs
+            ]
+    return {
+        "definitions": definitions,
+        "include_paths": include_paths,
+        "lib_paths": lib_dirs,
+        "bin_paths": bin_paths,
+        "libs": libs,
+        "metadata": {},
+    }
