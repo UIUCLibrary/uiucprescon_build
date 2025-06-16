@@ -1,5 +1,8 @@
 from __future__ import annotations
 import json
+import subprocess
+import shutil
+import tempfile
 from typing import (
     AnyStr,
     Callable,
@@ -120,11 +123,7 @@ def _build_deps(
     )
     cli = Cli(conan_api)
     cli.add_commands()
-    try:
-        conan_api.config.get("default")
-    except ConanException as e:
-        print(e)
-        conan_api.command.run(["profile", "detect", "--exist-ok"])
+    conan_api.command.run(["profile", "detect", "--exist-ok"])
 
     build_json = os.path.join(build_dir, "conan_build_info.json")
     conan_args = [
@@ -132,7 +131,6 @@ def _build_deps(
         conanfile,
         "--output-folder",
         build_dir,
-        # "--out-file", os.path.abspath(build_json),
     ]
 
     for b in build:
@@ -174,6 +172,26 @@ def _build_deps(
         f.write(json.dumps({"graph": serial}, indent=4))
     return build_json
 
+def get_msvc_compiler_version():
+    cl = shutil.which("cl.exe")
+    if not cl:
+        raise FileNotFoundError("Unable to locate cl.exe")
+    with tempfile.TemporaryDirectory() as tempdir:
+        test_source_file = os.path.join(tempdir, "get_msvc_version.cpp")
+        exec_file = os.path.join(tempdir, "get_msvc_version.exe")
+
+        with open(test_source_file, "w") as f:
+            f.write("""
+#include <stdio.h>
+int main(){
+    printf("%d\\n", _MSC_VER);
+    return 0;
+}
+""".lstrip())
+        subprocess.check_call([cl, test_source_file, f"/Fe:{exec_file}"])
+        result = subprocess.run([exec_file], shell=False, capture_output=True, check=True)
+        assert int(result.stdout), f"not a valid version: {result.stdout}"
+        return result.stdout[:3]
 
 def build_deps_with_conan(
     conanfile: str,
@@ -206,7 +224,7 @@ def build_deps_with_conan(
             default_profile_settings["compiler.version"].value
         )
         settings_data["compiler"][default_compiler]["version"].append(
-            get_compiler_version()
+            get_msvc_compiler_version() if default_compiler == "msvc" else get_compiler_version()
         )
 
         with open(settings_yaml, "w") as f:
