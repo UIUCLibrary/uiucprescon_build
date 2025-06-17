@@ -1,14 +1,17 @@
+from __future__ import annotations
 import abc
 import sys
-from typing import Optional, cast, List, Set
+from typing import Optional, cast, List, Set, TYPE_CHECKING
 import pybind11
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from uiucprescon.build.utils import locate_file
 from setuptools.command.build_py import build_py as BuildPy
 from setuptools.extension import Extension
 from setuptools.command.build_clib import build_clib as BuildClib
-from distutils.ccompiler import CCompiler
 import os
+
+if TYPE_CHECKING:
+    from distutils.ccompiler import CCompiler
 
 
 class AbsFindLibrary(abc.ABC):
