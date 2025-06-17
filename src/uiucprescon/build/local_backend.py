@@ -8,6 +8,8 @@ from . import monkey
 from pathlib import Path
 from typing import Optional, Dict, List, Union, cast
 
+from importlib.metadata import version
+
 pyproj_toml = Path("pyproject.toml")
 
 
@@ -42,9 +44,14 @@ def build_wheel(
         and config_settings.get("conan_cache") is not None
         and "CONAN_USER_HOME" in os.environ
     ):
-        config_settings["conan_cache"] = os.path.join(
-            os.environ["CONAN_USER_HOME"], ".conan"
-        )
+        if version("conan") < "2.0.0":
+            config_settings["conan_cache"] = os.path.join(
+                os.environ["CONAN_USER_HOME"], ".conan"
+            )
+        else:
+            config_settings["conan_cache"] = os.path.join(
+                os.environ["CONAN_USER_HOME"], ".conan2"
+            )
     conan_libs.build_conan(
         wheel_directory,
         config_settings,

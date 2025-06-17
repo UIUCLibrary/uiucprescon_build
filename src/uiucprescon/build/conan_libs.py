@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -422,22 +423,40 @@ def build_conan(
 
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
         command.arch = config_settings.get("arch")
-        command.compiler_version = config_settings.get(
-            "conan_compiler_version", get_compiler_version()
-        )
+        if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
+            full_version = re.search(
+                r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)", platform.python_compiler()
+            ).groups()[0]
+            command.compiler_version = full_version[:3]
+        else:
+            command.compiler_version = config_settings.get(
+                "conan_compiler_version", get_compiler_version()
+            )
+
     if conan_cache is None:
         conan_home = os.getenv("CONAN_USER_HOME")
         if conan_home is not None:
-            conan_cache = os.path.join(conan_home, ".conan")
+            if version("conan") < "2.0.0":
+                conan_cache = os.path.join(conan_home, ".conan")
+            else:
+                conan_cache = os.path.join(conan_home, ".conan2")
+
 
     if conan_cache is None:
-        os.path.join(
-            cast(
-                BuildExt, command.get_finalized_command("build_ext")
-            ).build_temp,
-            ".conan",
-        )
-
+        if version("conan") < "2.0.0":
+            os.path.join(
+                cast(
+                    BuildExt, command.get_finalized_command("build_ext")
+                ).build_temp,
+                ".conan",
+            )
+        else:
+            os.path.join(
+                cast(
+                    BuildExt, command.get_finalized_command("build_ext")
+                ).build_temp,
+                ".conan2",
+            )
     command.finalize_options()
     command.run()
 
