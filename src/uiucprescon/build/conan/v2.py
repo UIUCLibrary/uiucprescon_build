@@ -205,7 +205,7 @@ int main(){
             check=True
         )
         assert int(result.stdout), f"not a valid version: {result.stdout}"
-        return result.stdout[:3]
+        return result.stdout[:3].decode('ascii')
 
 
 def build_deps_with_conan(
