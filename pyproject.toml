@@ -12,7 +12,7 @@ classifiers = [
 dynamic = ["version"]
 
 dependencies = [
-    "setuptools>=61.0",
+    "setuptools>=77.0.1",
     'wheel',
     "cmake",
     'pybind11~=2.10.1',
@@ -38,15 +38,12 @@ package-dir = {"" = "src"}
 relative_files = false
 branch = true
 source = [
-    ".",
-#    "uiucprescon/build"
+    "src",
 ]
-#[tool.coverage.paths]
 [tool.coverage.report]
 include_namespace_packages= true
 [tool.coverage.paths]
 
-#[tool.coverage.report]
 [tool.mypy]
 mypy_path = "src"
 
