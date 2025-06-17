@@ -174,7 +174,12 @@ def _build_deps(
 
 
 def get_msvc_compiler_version():
-    cl = shutil.which("cl.exe")
+    from setuptools.msvc import EnvironmentInfo
+    visual_studio_info = EnvironmentInfo("amd64")
+    for path in visual_studio_info.VCTools:
+        cl = shutil.which("cl.exe", path=path)
+        if cl:
+            break
     if not cl:
         raise FileNotFoundError("Unable to locate cl.exe")
     with tempfile.TemporaryDirectory() as tempdir:
@@ -190,8 +195,14 @@ int main(){
 }
 """.lstrip())
         try:
-            subprocess.check_call(
-                [cl, test_source_file, f"/Fe:{exec_file}"]
+            env= {
+                ** os.environ.copy(),
+                **visual_studio_info.return_env()
+            }
+            pprint.pprint(env)
+            subprocess.run(
+                [cl, test_source_file, f"/Fe:{exec_file}"],
+                env=env
             )
         except subprocess.CalledProcessError as e:
             print("Failed to compile with MSVC compiler. "
@@ -202,7 +213,7 @@ int main(){
             [exec_file],
             shell=False,
             capture_output=True,
-            check=True
+            check=True,
         )
         assert int(result.stdout), f"not a valid version: {result.stdout}"
         return result.stdout[:3].decode('ascii')
