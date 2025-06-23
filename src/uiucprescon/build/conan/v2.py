@@ -15,6 +15,7 @@ from typing import (
 )
 import os
 
+import conan.errors
 import yaml
 
 from uiucprescon.build.compiler_info import get_compiler_version
@@ -118,6 +119,7 @@ def _build_deps(
     verbose=False,
     debug=False,
 ):
+    assert conanfile, "conanfile cannot be none"
     conan_api = ConanAPI(
         os.path.abspath(conan_cache) if conan_cache is not None else None
     )
@@ -160,7 +162,11 @@ def _build_deps(
         conan_args += ["--settings", "build_type=Release"]
 
     conan_args.append("--format=json")
-    result = conan_api.command.run(conan_args)
+    try:
+        result = conan_api.command.run(conan_args)
+    except conan.errors.ConanException as e:
+        print(f"Failed to run conan with {conan_args}")
+        raise e
     graph = result["graph"]
     field_filter = result.get("field_filter")
     package_filter = result.get("package_filter")
@@ -170,21 +176,24 @@ def _build_deps(
     )
     with open(build_json, "w") as f:
         f.write(json.dumps({"graph": serial}, indent=4))
+
     return build_json
 
 
-def get_msvc_compiler_version():
-    from setuptools.msvc import EnvironmentInfo
-    visual_studio_info = EnvironmentInfo("amd64")
-    for path in visual_studio_info.VCTools:
+def locate_cl(paths):
+    for path in paths:
         cl = shutil.which("cl.exe", path=path)
         if cl:
-            break
-    if not cl:
-        raise FileNotFoundError("Unable to locate cl.exe")
+            return cl
+    raise FileNotFoundError("Unable to locate cl.exe")
+
+
+def build_msvc_compiler_version_exec(output_exec) -> str:
+    from setuptools.msvc import EnvironmentInfo
+    visual_studio_info = EnvironmentInfo("amd64")
+    cl = locate_cl(visual_studio_info.VCTools)
     with tempfile.TemporaryDirectory() as tempdir:
         test_source_file = os.path.join(tempdir, "get_msvc_version.cpp")
-        exec_file = os.path.join(tempdir, "get_msvc_version.exe")
 
         with open(test_source_file, "w") as f:
             f.write("""
@@ -194,29 +203,50 @@ int main(){
     return 0;
 }
 """.lstrip())
+        env = {
+            ** os.environ.copy(),
+            **visual_studio_info.return_env()
+        }
         try:
-            env= {
-                ** os.environ.copy(),
-                **visual_studio_info.return_env()
-            }
-            pprint.pprint(env)
+            out_file = os.path.abspath(output_exec)
+            command = [cl, test_source_file, f"/Fe:{out_file}"]
             subprocess.run(
-                [cl, test_source_file, f"/Fe:{exec_file}"],
+                command,
+                cwd=tempdir,
                 env=env
             )
+            return out_file
         except subprocess.CalledProcessError as e:
             print("Failed to compile with MSVC compiler. "
                   "Here is the environment complied with.")
-            pprint.pprint(dict(os.environ))
+            pprint.pprint(env)
             raise e
-        result = subprocess.run(
-            [exec_file],
-            shell=False,
-            capture_output=True,
-            check=True,
-        )
-        assert int(result.stdout), f"not a valid version: {result.stdout}"
-        return result.stdout[:3].decode('ascii')
+
+
+def get_msvc_compiler_version(
+    working_path: Optional[str] = None,
+    force_rebuild: bool = False
+) -> str:
+    if working_path is None:
+        working_path = tempfile.TemporaryDirectory().name
+    exec_file = os.path.join(working_path, "get_msvc_version.exe")
+
+    if not os.path.exists(exec_file) or force_rebuild:
+        exec_file = build_msvc_compiler_version_exec(exec_file)
+        print(f"Built {exec_file}")
+    else:
+        print(f"Using existing {exec_file}")
+
+    result = subprocess.run(
+        [exec_file],
+        shell=False,
+        capture_output=True,
+        check=True,
+        encoding="mbcs",
+        errors="strict"
+    )
+    assert int(result.stdout), f"not a valid version: {result.stdout}"
+    return result.stdout[:3]
 
 
 def build_deps_with_conan(
@@ -234,13 +264,13 @@ def build_deps_with_conan(
     install_libs: bool = True,
     announce: Optional[Callable[[AnyStr, int], None]] = None,
 ) -> ConanBuildInfo:
+    assert conanfile, "conanfile cannot be none"
     verbose = False
     settings_yaml = os.path.join(conan_cache, "settings.yml")
     did_settings_yaml_already_exist = os.path.exists(settings_yaml)
     conan_api = ConanAPI(
         os.path.abspath(conan_cache) if conan_cache is not None else None
     )
-
     if not did_settings_yaml_already_exist:
         with open(settings_yaml, "r") as f:
             settings_data = yaml.load(f.read(), Loader=yaml.SafeLoader)
@@ -250,7 +280,8 @@ def build_deps_with_conan(
             default_profile_settings["compiler.version"].value
         )
         settings_data["compiler"][default_compiler]["version"].append(
-            get_msvc_compiler_version() if default_compiler == "msvc"
+            get_msvc_compiler_version(working_path=build_dir)
+            if default_compiler == "msvc"
             else get_compiler_version()
         )
 
@@ -282,4 +313,5 @@ def build_deps_with_conan(
             )
     with open(build_json, "r", encoding="utf-8") as f:
         build_info = read_conan_build_info_json(f)
+
     return build_info

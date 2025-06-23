@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import platform
 import re
@@ -7,15 +8,16 @@ import shutil
 import abc
 from importlib.metadata import version
 import typing
-from typing import Dict, List, Optional, cast, Set, Tuple, Union
-import setuptools
-import distutils.ccompiler
+from typing import Dict, List, Optional, cast, Set, Tuple, Union, TYPE_CHECKING
+
+
 from pathlib import Path
 from uiucprescon.build.deps import get_win_deps
 from uiucprescon.build.compiler_info import (
     get_compiler_version,
 )
 import json
+import setuptools
 from setuptools.dist import Distribution
 from setuptools.command.build_ext import build_ext as BuildExt
 from setuptools.command.build_py import build_py as BuildPy
@@ -23,6 +25,9 @@ from setuptools.command.build_clib import build_clib as BuildClib
 import toml
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import ConanBuildInfo, ConanBuildInfoParser
+
+if TYPE_CHECKING:
+    import distutils.ccompiler
 
 __all__ = ["ConanBuildInfoParser"]
 
@@ -231,6 +236,7 @@ class BuildConan(setuptools.Command):
         self.build_libs: List[str] = ['missing']
         self.conanfile: Optional[str] = None
         self.arch = None
+        self.build_temp: Optional[str] = None
 
     def __init__(self, dist: setuptools.dist.Distribution, **kw: str) -> None:
         self.install_libs = True
@@ -238,18 +244,20 @@ class BuildConan(setuptools.Command):
         super().__init__(dist, **kw)
 
     def finalize_options(self) -> None:
+        build_clib = cast(BuildClib, self.get_finalized_command("build_clib"))
+        self.build_temp = os.path.join(build_clib.build_temp, "conan")
+        if not os.path.exists(self.build_temp):
+            self.mkpath(self.build_temp)
         if self.conan_cache is None:
-            build_ext_cmd = cast(
-                BuildExt, self.get_finalized_command("build_ext")
-            )
-            build_dir = build_ext_cmd.build_temp
             if version("conan") < "2.0.0":
                 self.conan_cache = os.path.join(
-                    os.environ.get("CONAN_USER_HOME", build_dir), ".conan"
+                    os.environ.get("CONAN_USER_HOME", self.build_temp),
+                    ".conan"
                 )
             else:
                 self.conan_cache = os.path.join(
-                    os.environ.get("CONAN_USER_HOME", build_dir), ".conan2"
+                    os.environ.get("CONAN_USER_HOME", self.build_temp),
+                    ".conan2"
                 )
         if self.compiler_libcxx is None:
             self.compiler_libcxx = os.getenv("CONAN_COMPILER_LIBCXX")
@@ -263,11 +271,11 @@ class BuildConan(setuptools.Command):
                 build_ext_cmd = (
                     cast(BuildExt, self.get_finalized_command("build_ext"))
                 )
-
                 build_ext_cmd.setup_shlib_compiler()
                 if build_ext_cmd.shlib_compiler.compiler_type == "msvc":
                     from .conan.v2 import get_msvc_compiler_version
-                    self.compiler_version = get_msvc_compiler_version()
+                    self.compiler_version =\
+                        get_msvc_compiler_version(self.build_temp)
 
     def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
         for root, dirs, files in os.walk(root_dir):
@@ -303,8 +311,6 @@ class BuildConan(setuptools.Command):
                     extension.libraries.append(lib)
 
     def run(self) -> None:
-        build_clib = cast(BuildClib, self.get_finalized_command("build_clib"))
-
         build_ext = cast(BuildExt, self.get_finalized_command("build_ext"))
         if self.install_libs:
             if build_ext._inplace:
@@ -323,8 +329,8 @@ class BuildConan(setuptools.Command):
                 )
         else:
             install_dir = build_ext.build_temp
-        build_dir = os.path.join(build_clib.build_temp, "conan")
-        build_dir_full_path = os.path.abspath(build_dir)
+        # build_dir = os.path.join(build_clib.build_temp, "conan")
+        build_dir_full_path = os.path.abspath(self.build_temp)
         conan_cache = self.conan_cache
         if conan_cache and not os.path.exists(conan_cache):
             self.mkpath(conan_cache)
@@ -339,7 +345,7 @@ class BuildConan(setuptools.Command):
         )
         metadata = build_deps_with_conan(
             conanfile=conanfile,
-            build_dir=build_dir,
+            build_dir=self.build_temp,
             install_dir=os.path.abspath(install_dir),
             compiler_libcxx=self.compiler_libcxx,
             compiler_version=self.compiler_version,
@@ -425,7 +431,8 @@ def build_conan(
         command.arch = config_settings.get("arch")
         if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
             full_version = re.search(
-                r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)", platform.python_compiler()
+                r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)",
+                platform.python_compiler()
             ).groups()[0]
             command.compiler_version = full_version[:3]
         else:
@@ -440,7 +447,6 @@ def build_conan(
                 conan_cache = os.path.join(conan_home, ".conan")
             else:
                 conan_cache = os.path.join(conan_home, ".conan2")
-
 
     if conan_cache is None:
         if version("conan") < "2.0.0":
