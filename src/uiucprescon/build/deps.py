@@ -194,7 +194,9 @@ def use_readelf_to_determine_deps(
 
     run_readelf: Callable[[str], str] = run_readelf_strategy or _run_readelf
     deps = []
-    system_libs = ["libm", "libstdc++", "libgcc", "libc", "libpthread"]
+    system_libs = [
+        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    ]
     for line in run_readelf(library_path).split("\n"):
         if "Shared library:" in line:
             parts = line.split()
@@ -219,6 +221,8 @@ def fix_up_linux_libraries(
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
     for library in use_readelf_to_determine_deps(library):
+        if exclude_libraries and library in exclude_libraries:
+            continue
         for path in search_paths:
             matching_library = os.path.join(path, library)
             if not os.path.exists(matching_library):
