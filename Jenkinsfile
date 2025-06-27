@@ -343,12 +343,11 @@ pipeline {
                                                             try{
                                                                 try{
                                                                     image.inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
-                                                                        bat(label: 'Running Tox',
-                                                                            script: """python -m venv venv --clear && venv\\Scripts\\pip --disable-pip-version-check install uv
+                                                                        powershell(label: 'Running Tox',
+                                                                            script: """python -m venv venv --clear
+                                                                                       venv\\Scripts\\pip --disable-pip-version-check install uv
                                                                                        venv\\Scripts\\uv python install cpython-${version}
                                                                                        venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
-                                                                                       rmdir /s/q venv
-                                                                                       rmdir /s/q .tox
                                                                                 """
                                                                         )
                                                                     }
