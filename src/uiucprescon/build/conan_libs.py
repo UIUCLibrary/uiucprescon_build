@@ -430,11 +430,12 @@ def build_conan(
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
         command.arch = config_settings.get("arch")
         if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
-            full_version = re.search(
-                r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)",
-                platform.python_compiler()
-            ).groups()[0]
-            command.compiler_version = full_version[:3]
+            # full_version = re.search(
+            #     r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)",
+            #     platform.python_compiler()
+            # ).groups()[0]
+            from uiucprescon.build.conan.v2 import get_msvc_compiler_version
+            command.compiler_version = get_msvc_compiler_version()
         else:
             command.compiler_version = config_settings.get(
                 "conan_compiler_version", get_compiler_version()
