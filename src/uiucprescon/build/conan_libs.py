@@ -272,9 +272,9 @@ class BuildConan(setuptools.Command):
                     cast(BuildExt, self.get_finalized_command("build_ext"))
                 )
                 if platform.system() == "Windows":
-                    if build_ext_cmd.compiler is None:
+                    if build_ext_cmd.shlib_compiler is None:
                         build_ext_cmd.setup_shlib_compiler()
-                    if build_ext_cmd.compiler.compiler_type == "msvc":
+                    if build_ext_cmd.shlib_compiler.compiler_type == "msvc":
                         from .conan.v2 import get_msvc_compiler_version
                         self.compiler_version =\
                             get_msvc_compiler_version(self.build_temp)
