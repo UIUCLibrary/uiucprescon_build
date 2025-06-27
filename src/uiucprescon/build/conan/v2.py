@@ -1,8 +1,11 @@
 from __future__ import annotations
+import functools
 import json
+import platform
 import pprint
 import subprocess
 import shutil
+import sys
 import tempfile
 from typing import (
     AnyStr,
@@ -125,7 +128,11 @@ def _build_deps(
     )
     cli = Cli(conan_api)
     cli.add_commands()
-    conan_api.command.run(["profile", "detect", "--exist-ok"])
+    conan_api.command.run(
+        ["profile", "detect", "--exist-ok"]
+        + (["-vverbose"] if verbose else [])
+    )
+    conan_api.reinit()
 
     build_json = os.path.join(build_dir, "conan_build_info.json")
     conan_args = [
@@ -133,21 +140,26 @@ def _build_deps(
         conanfile,
         "--output-folder",
         build_dir,
-    ]
+        "-cc",
+        "core:non_interactive=True",
+    ] + [f"--build={b}" for b in build]
 
-    for b in build:
-        conan_args.append(f"--build={b}")
-    verbose = True
     if verbose:
         conan_args += ["-c:h", "tools.build:verbosity=verbose"]
         conan_args += ["-c:h", "tools.compilation:verbosity=verbose"]
 
     if compiler_version:
         conan_args += [
-            "--settings:host",
-            f"compiler.version={compiler_version}",
+            f"--settings:host=compiler.version={compiler_version}",
         ]
+        if platform.system() == "Windows":
+            from setuptools.msvc import EnvironmentInfo
 
+            visual_studio_info = EnvironmentInfo("amd64")
+            vs_version = int(visual_studio_info.vs_ver)
+            conan_args.append(
+                f"--conf=tools.microsoft.msbuild:vs_version={vs_version}"
+            )
     if target_os_version:
         conan_args += ["--settings:host", f"os.version={target_os_version}"]
 
@@ -165,7 +177,12 @@ def _build_deps(
     try:
         result = conan_api.command.run(conan_args)
     except conan.errors.ConanException as e:
-        print(f"Failed to run conan with {conan_args}")
+        print(
+            f'Failed to run conan with: "{" ".join(conan_args)}"',
+            file=sys.stderr,
+        )
+        print("Run with the following environment variables", file=sys.stderr)
+        pprint.pprint(dict(sorted(os.environ.items())), stream=sys.stderr)
         raise e
     graph = result["graph"]
     field_filter = result.get("field_filter")
@@ -190,42 +207,49 @@ def locate_cl(paths):
 
 def build_msvc_compiler_version_exec(output_exec) -> str:
     from setuptools.msvc import EnvironmentInfo
+
     visual_studio_info = EnvironmentInfo("amd64")
     cl = locate_cl(visual_studio_info.VCTools)
     with tempfile.TemporaryDirectory() as tempdir:
         test_source_file = os.path.join(tempdir, "get_msvc_version.cpp")
 
         with open(test_source_file, "w") as f:
-            f.write("""
+            f.write(
+                """
 #include <stdio.h>
 int main(){
     printf("%d\\n", _MSC_VER);
     return 0;
 }
-""".lstrip())
-        env = {
-            ** os.environ.copy(),
-            **visual_studio_info.return_env()
-        }
+""".lstrip()
+            )
+        env = {**os.environ.copy(), **visual_studio_info.return_env()}
         try:
             out_file = os.path.abspath(output_exec)
+            output_path = os.path.dirname(out_file)
+            if not os.path.exists(output_path):
+                os.makedirs(output_path, exist_ok=True)
             command = [cl, test_source_file, f"/Fe:{out_file}"]
             subprocess.run(
                 command,
                 cwd=tempdir,
-                env=env
+                env=env,
+                check=True,
             )
             return out_file
         except subprocess.CalledProcessError as e:
-            print("Failed to compile with MSVC compiler. "
-                  "Here is the environment complied with.")
+            print(
+                "Failed to compile with MSVC compiler. "
+                "Here is the environment complied with."
+            )
             pprint.pprint(env)
+            print(f"Here is the command that failed: {' '.join(command)}")
             raise e
 
 
+@functools.cache
 def get_msvc_compiler_version(
-    working_path: Optional[str] = None,
-    force_rebuild: bool = False
+    working_path: Optional[str] = None, force_rebuild: bool = False
 ) -> str:
     if working_path is None:
         working_path = tempfile.TemporaryDirectory().name
@@ -243,7 +267,7 @@ def get_msvc_compiler_version(
         capture_output=True,
         check=True,
         encoding="mbcs",
-        errors="strict"
+        errors="strict",
     )
     assert int(result.stdout), f"not a valid version: {result.stdout}"
     return result.stdout[:3]
