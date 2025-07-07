@@ -1,13 +1,14 @@
 import contextlib
 import os
 
+import setuptools
 import setuptools.build_meta
 import platform
+from . introspection import get_extension_build_info
 from . import conan_libs
 from . import monkey
 from pathlib import Path
 from typing import Optional, Dict, List, Union, cast
-
 from importlib.metadata import version
 
 pyproj_toml = Path("pyproject.toml")
@@ -38,7 +39,6 @@ def build_wheel(
 ) -> str:
     if platform.system() == "Windows":
         monkey.patch_for_msvc_specialized_compiler()
-
     if (
         config_settings is not None
         and config_settings.get("conan_cache") is not None
@@ -52,6 +52,27 @@ def build_wheel(
             config_settings["conan_cache"] = os.path.join(
                 os.environ["CONAN_USER_HOME"], ".conan2"
             )
+    build_info = get_extension_build_info()
+
+    required_cxx_std = None
+    required_c_std = None
+    for ext in build_info["extensions"]:
+        if "c_std" in ext:
+            if required_c_std is None:
+                required_c_std = ext["c_std"]
+            else:
+                if int(required_c_std) < int(ext["c_std"]):
+                    required_c_std = ext["c_std"]
+        if "cxx_std" in ext:
+            if required_cxx_std is None:
+                required_cxx_std = ext["cxx_std"]
+            else:
+                if int(required_cxx_std) < int(ext["cxx_std"]):
+                    required_cxx_std = ext["cxx_std"]
+    if required_cxx_std:
+        config_settings["cxx_std"] = required_cxx_std
+    if required_c_std:
+        config_settings["c_std"] = required_c_std
     conan_libs.build_conan(
         wheel_directory,
         config_settings,

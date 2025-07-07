@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import re
 import shutil
@@ -5,7 +6,13 @@ import subprocess
 import sys
 from importlib.metadata import version
 from pathlib import Path
-from typing import Tuple, cast, List
+from typing import Tuple, cast, List, Optional
+
+
+@dataclasses.dataclass
+class LanguageStandardsVersion:
+    cpp_std: Optional[str] = None
+    c_std: Optional[str] = None
 
 
 def get_conan_version() -> Tuple[str, str]:

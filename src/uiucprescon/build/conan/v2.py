@@ -33,6 +33,7 @@ import dataclasses
 
 if TYPE_CHECKING:
     from uiucprescon.build.conan_libs import ConanBuildInfo
+    from .utils import LanguageStandardsVersion
 
 __all__ = ["build_deps_with_conan"]
 
@@ -119,6 +120,7 @@ def _build_deps(
     target_os_version,
     compiler_libcxx,
     arch=None,
+    language_standards: Optional[LanguageStandardsVersion] = None,
     verbose=False,
     debug=False,
 ):
@@ -148,18 +150,30 @@ def _build_deps(
         conan_args += ["-c:h", "tools.build:verbosity=verbose"]
         conan_args += ["-c:h", "tools.compilation:verbosity=verbose"]
 
+    if language_standards:
+        if language_standards.cpp_std:
+            conan_args.append(
+                f"--settings:host=compiler.cppstd={language_standards.cpp_std}"
+            )
+
+        if language_standards.c_std:
+            conan_args.append(
+                f"--settings:host=compiler.cstd={language_standards.c_std}"
+            )
+
     if compiler_version:
         conan_args += [
             f"--settings:host=compiler.version={compiler_version}",
         ]
         if platform.system() == "Windows":
-            from setuptools.msvc import EnvironmentInfo
+            if "MSC" in platform.python_compiler():
+                from setuptools.msvc import EnvironmentInfo
 
-            visual_studio_info = EnvironmentInfo("amd64")
-            vs_version = int(visual_studio_info.vs_ver)
-            conan_args.append(
-                f"--conf=tools.microsoft.msbuild:vs_version={vs_version}"
-            )
+                visual_studio_info = EnvironmentInfo("amd64")
+                vs_version = int(visual_studio_info.vs_ver)
+                conan_args.append(
+                    f"--conf=tools.microsoft.msbuild:vs_version={vs_version}"
+                )
     if target_os_version:
         conan_args += ["--settings:host", f"os.version={target_os_version}"]
 
@@ -284,6 +298,7 @@ def build_deps_with_conan(
     conan_options: Optional[List[str]] = None,
     target_os_version: Optional[str] = None,
     arch: Optional[str] = None,
+    language_standards: Optional[LanguageStandardsVersion] = None,
     debug: bool = False,
     install_libs: bool = True,
     announce: Optional[Callable[[AnyStr, int], None]] = None,
@@ -325,6 +340,7 @@ def build_deps_with_conan(
             target_os_version,
             compiler_libcxx,
             arch,
+            language_standards,
             verbose,
             debug,
         )

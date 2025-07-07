@@ -1,20 +1,40 @@
+from __future__ import annotations
+
 import contextlib
+import functools
 import os
 import platform
 import re
 import subprocess
 import sys
+import sysconfig
 import warnings
-
-from distutils.util import get_platform
-from typing import List, Callable, Optional, Union, Set, Dict, cast
-from distutils.ccompiler import CCompiler
+from setuptools.msvc import EnvironmentInfo
+from typing import (
+    List, Callable, Optional, Union, Set, Dict, cast, TYPE_CHECKING
+)
 from .msvc import msvc14_get_vc_env
 import shutil
+
+if TYPE_CHECKING:
+    from distutils.ccompiler import CCompiler
 
 DEPS_REGEX = (
     r"(?<=(Image has the following dependencies:(\n){2}))((?<=\s).*\.dll\n)*"
 )
+
+
+def get_platform() -> str:
+    if os.name == 'nt':
+        TARGET_TO_PLAT = {
+            'x86': 'win32',
+            'x64': 'win-amd64',
+            'arm': 'win-arm32',
+            'arm64': 'win-arm64',
+        }
+        target = os.environ.get('VSCMD_ARG_TGT_ARCH')
+        return TARGET_TO_PLAT.get(target) or sysconfig.get_platform()
+    return sysconfig.get_platform()
 
 
 def parse_dumpbin_data(data: str) -> List[str]:
@@ -41,6 +61,16 @@ def parse_dumpbin_deps(file: str) -> List[str]:
         return parse_dumpbin_data(f.read())
 
 
+WINDOWS_SYSTEM_DLLS = [
+    "ADVAPI32.dll",
+    "CRYPT32.dll",
+    "KERNEL32.dll",
+    "USER32.dll",
+    "WS2_32.dll",
+    "GDI32.dll",
+]
+
+
 def remove_system_dlls(dlls: List[str]) -> List[str]:
     non_system_dlls = []
     for dll in dlls:
@@ -50,13 +80,25 @@ def remove_system_dlls(dlls: List[str]) -> List[str]:
         if dll.startswith("python"):
             continue
 
-        if dll == "KERNEL32.dll":
+        if dll.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
             continue
         non_system_dlls.append(dll)
     return non_system_dlls
 
 
+def locate_dumpbin_via_path2() -> Optional[str]:
+    visual_studio_info = EnvironmentInfo("amd64")
+    for path in visual_studio_info.return_env()["path"].split(";"):
+        if not os.path.exists(path):
+            continue
+        dumpbin = shutil.which("dumpbin.exe", path=path)
+        if dumpbin is not None:
+            return dumpbin
+    return None
+
+
 def locate_dumpbin_via_path() -> Optional[str]:
+    warnings.warn("Use locate_dumpbin_via_path2 instead", DeprecationWarning)
     vc_env = msvc14_get_vc_env(get_platform())
     for path in vc_env.get("path", "").split(";"):
         dumpbin_exe = shutil.which("dumpbin", path=path)
@@ -66,6 +108,7 @@ def locate_dumpbin_via_path() -> Optional[str]:
 
 
 def locate_dumpbin_using_vs_where() -> Optional[str]:
+
     variant = "arm64" if get_platform() == "win-arm64" else "x86.x64"
     suitable_components = (
         f"Microsoft.VisualStudio.Component.VC.Tools.{variant}",
@@ -114,9 +157,23 @@ def locate_dumpbin_using_vs_where() -> Optional[str]:
 
 
 FIND_DUMPBIN_STRATEGIES_DEFAULT_ORDER: List[Callable[[], Optional[str]]] = [
-    locate_dumpbin_via_path,
+    locate_dumpbin_via_path2,
     locate_dumpbin_using_vs_where,
 ]
+
+
+@functools.cache
+def locate_dumpbin(
+    strategy: Optional[Callable[[], Optional[str]]] = None
+) -> Optional[str]:
+    if strategy is not None:
+        return strategy()
+
+    for strategy in FIND_DUMPBIN_STRATEGIES_DEFAULT_ORDER:
+        dumpbin_exe = strategy()
+        if dumpbin_exe is not None:
+            return dumpbin_exe
+    return None
 
 
 def get_win_deps(
@@ -152,16 +209,9 @@ def get_win_deps(
 
 
 def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
-    from setuptools.msvc import EnvironmentInfo
 
     visual_studio_info = EnvironmentInfo("amd64")
-    for path in visual_studio_info.return_env()["path"].split(";"):
-        if not os.path.exists(path):
-            continue
-        dumpbin = shutil.which("dumpbin.exe", path=path)
-        if dumpbin is not None:
-            break
-
+    dumpbin = locate_dumpbin()
     if dumpbin is None:
         raise FileNotFoundError("Unable to locate dumpbin.exe")
 
