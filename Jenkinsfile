@@ -278,34 +278,45 @@ pipeline {
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
-                                                    retry(1){
-                                                        node('docker && linux'){
-                                                            checkout scm
-                                                            def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
-                                                            try{
-                                                                withEnv([
-                                                                    'PIP_CACHE_DIR=/tmp/pipcache',
-                                                                    'UV_INDEX_STRATEGY=unsafe-best-match',
-                                                                    'UV_TOOL_DIR=/tmp/uvtools',
-                                                                    'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
-                                                                    'UV_CACHE_DIR=/tmp/uvcache',
-                                                                ]){
-                                                                    try{
-                                                                        image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
-                                                                            sh( label: 'Running Tox',
-                                                                                script: """python3 -m venv venv --clear
-                                                                                            ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                           ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
-                                                                                        """
+                                                    node('docker && linux'){
+                                                        checkout scm
+                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
+                                                        try{
+                                                            withEnv([
+                                                                'PIP_CACHE_DIR=/tmp/pipcache',
+                                                                'UV_INDEX_STRATEGY=unsafe-best-match',
+                                                                'UV_TOOL_DIR=/tmp/uvtools',
+                                                                'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
+                                                                'UV_CACHE_DIR=/tmp/uvcache',
+                                                            ]){
+                                                                try{
+                                                                    image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
+                                                                        retry(3){
+                                                                            try{
+                                                                                sh( label: 'Running Tox',
+                                                                                    script: """python3 -m venv venv --clear
+                                                                                                ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                               ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
+                                                                                            """
+                                                                                    )
+                                                                            } catch(e) {
+                                                                                cleanWs(
+                                                                                    notFailBuild: true,
+                                                                                    deleteDirs: true,
+                                                                                    patterns: [
+                                                                                        [pattern: '.tox/', type: 'INCLUDE'],
+                                                                                        [pattern: 'venv/', type: 'INCLUDE'],
+                                                                                    ]
                                                                                 )
+                                                                            }
                                                                         }
-                                                                    } finally{
-                                                                        sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                                     }
+                                                                } finally{
+                                                                    sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                                 }
-                                                            } finally {
-                                                                sh "docker rmi --no-prune ${image.id}"
                                                             }
+                                                        } finally {
+                                                            sh "docker rmi --no-prune ${image.id}"
                                                         }
                                                     }
                                                 }
@@ -372,13 +383,26 @@ pipeline {
                                                                          --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
                                                                          "
                                                                      ){
-                                                                        powershell(label: 'Running Tox',
-                                                                            script: """python -m venv venv --clear
-                                                                                       venv\\Scripts\\pip --disable-pip-version-check install uv
-                                                                                       venv\\Scripts\\uv python install cpython-${version}
-                                                                                       venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
-                                                                                """
-                                                                        )
+                                                                        retry(3){
+                                                                            try{
+                                                                                powershell(label: 'Running Tox',
+                                                                                    script: """python -m venv venv --clear
+                                                                                               venv\\Scripts\\pip --disable-pip-version-check install uv
+                                                                                               venv\\Scripts\\uv python install cpython-${version}
+                                                                                               venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
+                                                                                        """
+                                                                                )
+                                                                            } catch(e) {
+                                                                                cleanWs(
+                                                                                    notFailBuild: true,
+                                                                                    deleteDirs: true,
+                                                                                    patterns: [
+                                                                                        [pattern: '.tox/', type: 'INCLUDE'],
+                                                                                        [pattern: 'venv/', type: 'INCLUDE'],
+                                                                                    ]
+                                                                                )
+                                                                            }
+                                                                        }
                                                                     }
                                                                 } finally {
                                                                     bat "${tool(name: 'Default', type: 'git')} clean -dfx"
@@ -429,21 +453,24 @@ pipeline {
                                                             'UV_INDEX_STRATEGY=unsafe-best-match',
                                                         ]){
                                                             try{
-                                                                sh( label: 'Running Tox',
-                                                                    script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
-                                                                               ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
-                                                                            """
-                                                                    )
-                                                            } catch(e) {
-                                                                script{
-                                                                    if(fileExists( 'venv/bin/uv')){
-                                                                        sh(script: '''. ./venv/bin/activate
-                                                                                      uv python list
-                                                                                   '''
-                                                                           )
+                                                                retry(3){
+                                                                    try{
+                                                                        sh( label: 'Running Tox',
+                                                                            script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                       ./venv/bin/uvx -p ${version} --python-preference only-system --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vvv
+                                                                                    """
+                                                                        )
+                                                                    } catch(e) {
+                                                                        cleanWs(
+                                                                            notFailBuild: true,
+                                                                            deleteDirs: true,
+                                                                            patterns: [
+                                                                                [pattern: '.tox/', type: 'INCLUDE'],
+                                                                                [pattern: 'venv/', type: 'INCLUDE'],
+                                                                            ]
+                                                                        )
                                                                     }
                                                                 }
-                                                                throw e
                                                             } finally{
                                                                 sh "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                             }
