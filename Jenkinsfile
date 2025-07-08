@@ -273,7 +273,7 @@ pipeline {
                                                                     'UV_CACHE_DIR=/tmp/uvcache',
                                                                 ]){
                                                                     try{
-                                                                        image.inside{
+                                                                        image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
                                                                             sh( label: 'Running Tox',
                                                                                 script: """python3 -m venv venv --clear
                                                                                             ./venv/bin/pip install --disable-pip-version-check uv
@@ -315,7 +315,13 @@ pipeline {
                                     node('docker && windows'){
                                         checkout scm
                                         try{
-                                            docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python').inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
+                                            docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python')
+                                                .inside("\
+                                                    --mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR} \
+                                                    --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
+                                                    --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
+                                                    "
+                                                ){
                                                 bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
                                                 envs = bat(
                                                     label: 'Get tox environments',
@@ -342,7 +348,12 @@ pipeline {
                                                             }
                                                             try{
                                                                 try{
-                                                                    image.inside("--mount source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"){
+                                                                    image.inside("\
+                                                                         --mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR} \
+                                                                         --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
+                                                                         --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
+                                                                         "
+                                                                     ){
                                                                         powershell(label: 'Running Tox',
                                                                             script: """python -m venv venv --clear
                                                                                        venv\\Scripts\\pip --disable-pip-version-check install uv
