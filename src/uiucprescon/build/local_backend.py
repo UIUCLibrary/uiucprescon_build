@@ -70,8 +70,12 @@ def build_wheel(
                 if int(required_cxx_std) < int(ext["cxx_std"]):
                     required_cxx_std = ext["cxx_std"]
     if required_cxx_std:
+        if config_settings is None:
+            config_settings = {}
         config_settings["cxx_std"] = required_cxx_std
     if required_c_std:
+        if config_settings is None:
+            config_settings = {}
         config_settings["c_std"] = required_c_std
     conan_libs.build_conan(
         wheel_directory,
