@@ -94,6 +94,24 @@ pipeline {
                             stages{
                                 stage('Run Checks'){
                                     parallel{
+                                        stage('Bandit'){
+                                            steps{
+                                                catchError(buildResult: 'SUCCESS', message: 'Bandit found some issues', stageResult: 'UNSTABLE') {
+                                                    sh(
+                                                        label: 'Run pydocstyle',
+                                                        script: '''. ./venv/bin/activate
+                                                                   mkdir -p reports/bandit
+                                                                   bandit --recursive src -f html -o reports/bandit/report.html
+                                                                '''
+                                                    )
+                                                }
+                                            }
+                                            post {
+                                                unstable {
+                                                    publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'reports/bandit', reportFiles: 'report.html', reportName: 'Bandit Report', reportTitles: ''])
+                                                }
+                                            }
+                                        }
                                         stage('pyDocStyle'){
                                             steps{
                                                 catchError(buildResult: 'SUCCESS', message: 'Did not pass all pyDocStyle tests', stageResult: 'UNSTABLE') {
