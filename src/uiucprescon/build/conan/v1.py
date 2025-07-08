@@ -4,12 +4,12 @@ This was written before conan has a stable Python API which was introduced in
 version 2. This code only works with Conan version 1 because it calls on code
 that was removed from conan in version 2.
 """
-
+from __future__ import annotations
 import logging
 import os
 import platform
 import shutil
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from conans.client import conan_api, conf  # pylint: disable=import-error
 
@@ -20,6 +20,9 @@ from uiucprescon.build.compiler_info import (  # pylint: disable=import-error
 )
 from .files import ConanBuildInfoTXT
 from .utils import copy_conan_imports_from_manifest
+
+if TYPE_CHECKING:
+    from .utils import LanguageStandardsVersion
 
 __all__ = ["build_deps_with_conan"]
 
@@ -35,6 +38,7 @@ def build_deps_with_conan(
     conan_options: Optional[List[str]] = None,
     target_os_version: Optional[str] = None,
     arch: Optional[str] = None,
+    language_standards: Optional[LanguageStandardsVersion] = None,
     debug: bool = False,
     install_libs=True,
     announce=None,

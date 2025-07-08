@@ -150,6 +150,159 @@ def locate_conanbuildinfo_json(search_locations: List[str]) -> Optional[str]:
     return locate_file("conanbuildinfo.json", search_locations)
 
 
+def _get_from_ref(reference_key: str, nodes):
+    include_paths = []
+    definitions = []
+    lib_dirs = []
+    bin_paths = []
+    libs = []
+    for node_key, node in nodes.items():
+        if node_key != reference_key:
+            continue
+        for dep_key, dep in node.get('dependencies', {}).items():
+            data = _get_from_ref(dep_key, nodes)
+            include_paths += [
+                include_path for include_path
+                in data.get("include_paths", []) or []
+                if all([
+                    include_path not in include_paths,
+                    os.path.exists(include_path)
+                ])
+            ]
+
+            definitions += [
+                define for define in data.get("definitions", []) or []
+                if define not in definitions
+            ]
+
+            lib_dirs += [
+                lib_dir for lib_dir in data.get("lib_paths", []) or []
+                if all([
+                    lib_dir not in lib_dirs,
+                    os.path.exists(lib_dir)
+                ])
+            ]
+
+            bin_paths += [
+                bindir for bindir in data.get("bin_paths", []) or []
+                if all([
+                    bindir not in bin_paths,
+                    os.path.exists(bindir)
+                ])
+            ]
+
+            libs += [
+                lib for lib in data.get("libs", []) or []
+                if lib not in libs
+            ]
+
+        for data in node.get('cpp_info', {}).values():
+            include_paths += [
+                include_path for include_path
+                in data.get("includedirs", []) or []
+                if all([
+                    include_path not in include_paths,
+                    os.path.exists(include_path)
+                ])
+            ]
+
+            definitions += [
+                define for define in data.get("defines", []) or []
+                if define not in definitions
+            ]
+
+            lib_dirs += [
+                lib_dir for lib_dir in data.get("libdirs", []) or []
+                if all([
+                    lib_dir not in lib_dirs,
+                    os.path.exists(lib_dir)
+                ])
+            ]
+
+            bin_paths += [
+                bindir for bindir in data.get("bindirs", []) or []
+                if all([
+                    bindir not in bin_paths,
+                    os.path.exists(bindir)
+                ])
+            ]
+
+            libs += [
+                lib for lib in data.get("libs", []) or []
+                if lib not in libs
+            ]
+            libs += [
+                lib for lib in data.get("system_libs", []) or []
+                if lib not in libs
+            ]
+    return {
+        "definitions": definitions,
+        "include_paths": include_paths,
+        "lib_paths": lib_dirs,
+        "bin_paths": bin_paths,
+        "libs": libs,
+        "metadata": {},
+    }
+
+
+def get_library_metadata_from_build_info_json(
+    library_name, fp: io.TextIOWrapper
+):
+    definitions: List[str] = []
+    include_paths: List[str] = []
+    lib_dirs: List[str] = []
+    bin_paths: List[str] = []
+    libs: List[str] = []
+    original_position = fp.tell()
+    try:
+        fp.seek(0)
+        try:
+            data = json.load(fp)
+        except json.JSONDecodeError as e:
+            warnings.warn(
+                f"Failed to parse JSON from {fp.name}: {e}",
+                category=UserWarning,
+            )
+            return None
+        found = False
+        for key, node in data['graph']['nodes'].items():
+            if node.get('name') is None or node.get('name') != library_name:
+                continue
+            found = True
+            node_data = _get_from_ref(key, data['graph']['nodes'])
+            for include_path in reversed(node_data.get('include_paths', [])):
+                if include_path not in include_paths:
+                    include_paths.append(include_path)
+
+            for definition in reversed(node_data.get('defines', [])):
+                if definition not in definitions:
+                    definitions.append(definition)
+
+            for lib_dir in reversed(node_data.get('lib_paths', [])):
+                if lib_dir not in lib_dirs:
+                    lib_dirs.append(lib_dir)
+
+            for lib in reversed(node_data.get('libs', [])):
+                if lib not in libs:
+                    libs.append(lib)
+
+            for bin_path in reversed(node_data.get('bin_paths', [])):
+                if bin_path not in bin_paths:
+                    bin_paths.append(bin_path)
+        if not found:
+            return None
+        return {
+            "definitions": definitions,
+            "include_paths": include_paths,
+            "lib_paths": lib_dirs,
+            "bin_paths": bin_paths,
+            "libs": libs,
+            "metadata": {},
+        }
+    finally:
+        fp.seek(original_position)
+
+
 def read_conan_build_info_json(fp: io.TextIOWrapper):
     definitions: List[str] = []
     include_paths: List[str] = []

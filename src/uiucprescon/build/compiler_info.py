@@ -1,7 +1,7 @@
 import platform
 import re
 import sys
-import subprocess
+import subprocess  # nosec B404
 import os
 
 from uiucprescon.build.errors import PlatformError, ExecError
@@ -75,7 +75,12 @@ def get_visual_studio_version() -> str:
 
 def _get_clang_version(env) -> str:
     cmd = ["cc", "--version"]
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE)
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        stdout=subprocess.PIPE,
+        shell=False  # nosec B603
+    )
     proc.wait()
     exitcode = proc.returncode
     clang_version_regex = re.compile(
@@ -141,7 +146,11 @@ def get_clang_version() -> str:
 
 def _get_gcc_version(cmd) -> str:
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        shell=False  # nosec B603
+    )
     proc.wait()
     exitcode = proc.returncode
     if proc.stdout is None:

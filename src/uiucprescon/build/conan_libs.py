@@ -1,8 +1,9 @@
 from __future__ import annotations
+import functools
 import os
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import shutil
 import abc
@@ -24,10 +25,14 @@ from setuptools.command.build_py import build_py as BuildPy
 from setuptools.command.build_clib import build_clib as BuildClib
 import toml
 from uiucprescon.build.conan import conan_api
-from uiucprescon.build.conan.files import ConanBuildInfo, ConanBuildInfoParser
+from uiucprescon.build.conan.files import (
+    ConanBuildInfo, ConanBuildInfoParser,
+    get_library_metadata_from_build_info_json
+)
 
 if TYPE_CHECKING:
     import distutils.ccompiler
+from uiucprescon.build.conan.utils import LanguageStandardsVersion
 
 __all__ = ["ConanBuildInfoParser"]
 
@@ -129,7 +134,8 @@ class CompilerInfoAdder:
 
     def add_lib_dirs(self, lib_dirs: List[str]) -> None:
         for path in reversed(lib_dirs):
-            assert os.path.exists(path)
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"{path} does not exist")
             if path not in self._place_to_add.library_dirs:
                 self._place_to_add.library_dirs.insert(0, path)
 
@@ -175,6 +181,73 @@ def update_extension(
         else:
             updated_libs.append(extension_lib)
     extension.libraries = updated_libs
+    extension.include_dirs = include_dirs + extension.include_dirs
+    extension.library_dirs = library_dirs + extension.library_dirs
+    extension.define_macros = define_macros + extension.define_macros
+
+
+def update_extension3(
+    extension: setuptools.extension.Extension,
+    strategy: typing.Callable[[setuptools.extension.Extension], None]
+) -> None:
+    strategy(extension)
+
+
+def match_libs(
+    extension: setuptools.extension.Extension,
+    build_path: str
+) -> None:
+    build_json = os.path.join(build_path, "conan_build_info.json")
+    with open(build_json, "r", encoding="utf-8") as f:
+        libraries = extension.libraries.copy()
+        for original_lib_name in libraries:
+            if metadata := get_library_metadata_from_build_info_json(
+                original_lib_name,
+                f
+            ):
+                original_position =\
+                    extension.libraries.index(original_lib_name)
+                extension.libraries.remove(original_lib_name)
+                for lib in reversed(metadata["libs"]):
+                    if lib not in extension.libraries:
+                        extension.libraries.insert(original_position, lib)
+                for include_path in reversed(metadata["include_paths"]):
+                    if include_path not in extension.include_dirs:
+                        extension.include_dirs.insert(0, include_path)
+                for lib_path in reversed(metadata["lib_paths"]):
+                    if lib_path not in extension.library_dirs:
+                        extension.library_dirs.insert(0, lib_path)
+                for define in reversed(metadata.get("definitions", [])):
+                    if define not in extension.define_macros:
+                        extension.define_macros.insert(0, (define, None))
+
+
+def add_all_libs(
+    extension: setuptools.extension.Extension,
+    text_md: ConanBuildInfo
+) -> None:
+    """
+    This strategy adds all libraries from the extension to the extension's
+    libraries list.
+    """
+    include_dirs = text_md["include_paths"]
+    library_dirs = text_md["lib_paths"]
+    define_macros = [(d, None) for d in text_md.get("definitions", [])]
+    libs = extension.libraries.copy()
+
+    for original_lib_name in extension.libraries:
+        metadata = text_md["metadata"]
+        if original_lib_name not in metadata:
+            continue
+        conan_libs = metadata[original_lib_name]["libs"]
+        index = libs.index(original_lib_name)
+        libs[index: index + 1] = conan_libs
+
+    extension.libraries = libs
+    for lib in text_md["libs"]:
+        if lib not in extension.libraries:
+            extension.libraries.append(lib)
+
     extension.include_dirs = include_dirs + extension.include_dirs
     extension.library_dirs = library_dirs + extension.library_dirs
     extension.define_macros = define_macros + extension.define_macros
@@ -237,6 +310,7 @@ class BuildConan(setuptools.Command):
         self.conanfile: Optional[str] = None
         self.arch = None
         self.build_temp: Optional[str] = None
+        self.language_standards = None
 
     def __init__(self, dist: setuptools.dist.Distribution, **kw: str) -> None:
         self.install_libs = True
@@ -268,13 +342,8 @@ class BuildConan(setuptools.Command):
                     "CONAN_COMPILER_VERSION", get_compiler_version()
                 )
             else:
-                build_ext_cmd = (
-                    cast(BuildExt, self.get_finalized_command("build_ext"))
-                )
                 if platform.system() == "Windows":
-                    if build_ext_cmd.shlib_compiler is None:
-                        build_ext_cmd.setup_shlib_compiler()
-                    if build_ext_cmd.shlib_compiler.compiler_type == "msvc":
+                    if "msc" in platform.python_compiler().lower():
                         from .conan.v2 import get_msvc_compiler_version
                         self.compiler_version =\
                             get_msvc_compiler_version(self.build_temp)
@@ -354,24 +423,35 @@ class BuildConan(setuptools.Command):
             target_os_version=self.target_os_version,
             arch=self.arch,
             build=self.build_libs if len(self.build_libs) > 0 else None,
+            language_standards=self.language_standards,
             conan_options=get_conan_options(),
             conan_cache=conan_cache,
             install_libs=self.install_libs,
             announce=self.announce,
         )
         build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
+        extensions = []
         for extension in build_ext_cmd.extensions:
             if build_ext._inplace:
                 extension.runtime_library_dirs.append(
                     os.path.abspath(install_dir)
                 )
-            update_extension2(extension, metadata)
+            update_extension3(
+                extension,
+                strategy=(
+                    functools.partial(add_all_libs, text_md=metadata)
+                    if version('conan') < '2.0.0' else
+                    functools.partial(match_libs, build_path=self.build_temp)
+                )
+            )
             extension.library_dirs.insert(0, install_dir)
             if sys.platform == "darwin":
                 extension.runtime_library_dirs.append("@loader_path")
             elif sys.platform == "linux":
                 if "$ORIGIN" not in extension.runtime_library_dirs:
                     extension.runtime_library_dirs.append("$ORIGIN")
+            extensions.append(extension)
+        build_ext_cmd.extensions = extensions
 
 
 def _get_source_root(dist: Distribution) -> str:
@@ -432,15 +512,15 @@ def build_conan(
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
         command.arch = config_settings.get("arch")
         if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
-            # full_version = re.search(
-            #     r"^(?:[A-Za-z]+ )(?:v[.])?(([0-9]+[.]?)+)",
-            #     platform.python_compiler()
-            # ).groups()[0]
             from uiucprescon.build.conan.v2 import get_msvc_compiler_version
             command.compiler_version = get_msvc_compiler_version()
         else:
             command.compiler_version = config_settings.get(
                 "conan_compiler_version", get_compiler_version()
+            )
+        if version("conan") > "2.0.0":
+            command.language_standards = LanguageStandardsVersion(
+                cpp_std=config_settings.get('cxx_std')
             )
 
     if conan_cache is None:
@@ -486,6 +566,7 @@ def build_deps_with_conan(
     conan_options: Optional[List[str]] = None,
     target_os_version: Optional[str] = None,
     arch: Optional[str] = None,
+    language_standards: Optional[LanguageStandardsVersion] = None,
     debug: bool = False,
     install_libs=True,
     build=None,
@@ -502,6 +583,7 @@ def build_deps_with_conan(
         conan_options,
         target_os_version,
         arch,
+        language_standards,
         debug,
         install_libs,
         announce,
@@ -525,7 +607,7 @@ def fixup_library(shared_library: str) -> None:
             r"/"
             r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
         )
-        for line in subprocess.check_output(
+        for line in subprocess.check_output(  # nosec B603
             [otool, "-L", shared_library], encoding="utf8"
         ).split("\n"):
             if any(
@@ -551,7 +633,7 @@ def fixup_library(shared_library: str) -> None:
                 os.path.join("@loader_path", library_name),
                 str(shared_library),
             ]
-            subprocess.check_call(command)
+            subprocess.check_call(command)  # nosec B603
 
 
 def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
