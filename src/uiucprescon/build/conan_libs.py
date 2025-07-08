@@ -3,7 +3,7 @@ import functools
 import os
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import shutil
 import abc
@@ -134,7 +134,8 @@ class CompilerInfoAdder:
 
     def add_lib_dirs(self, lib_dirs: List[str]) -> None:
         for path in reversed(lib_dirs):
-            assert os.path.exists(path)
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"{path} does not exist")
             if path not in self._place_to_add.library_dirs:
                 self._place_to_add.library_dirs.insert(0, path)
 
@@ -606,7 +607,7 @@ def fixup_library(shared_library: str) -> None:
             r"/"
             r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
         )
-        for line in subprocess.check_output(
+        for line in subprocess.check_output(  # nosec B603
             [otool, "-L", shared_library], encoding="utf8"
         ).split("\n"):
             if any(
@@ -632,7 +633,7 @@ def fixup_library(shared_library: str) -> None:
                 os.path.join("@loader_path", library_name),
                 str(shared_library),
             ]
-            subprocess.check_call(command)
+            subprocess.check_call(command)  # nosec B603
 
 
 def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:

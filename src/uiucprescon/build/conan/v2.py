@@ -3,7 +3,7 @@ import functools
 import json
 import platform
 import pprint
-import subprocess
+import subprocess  # nosec B404
 import shutil
 import sys
 import tempfile
@@ -124,7 +124,9 @@ def _build_deps(
     verbose=False,
     debug=False,
 ):
-    assert conanfile, "conanfile cannot be none"
+    if conanfile is None:
+        raise ValueError("conanfile cannot be none")
+
     conan_api = ConanAPI(
         os.path.abspath(conan_cache) if conan_cache is not None else None
     )
@@ -244,7 +246,7 @@ int main(){
             if not os.path.exists(output_path):
                 os.makedirs(output_path, exist_ok=True)
             command = [cl, test_source_file, f"/Fe:{out_file}"]
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 command,
                 cwd=tempdir,
                 env=env,
@@ -275,7 +277,7 @@ def get_msvc_compiler_version(
     else:
         print(f"Using existing {exec_file}")
 
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603
         [exec_file],
         shell=False,
         capture_output=True,
@@ -283,7 +285,10 @@ def get_msvc_compiler_version(
         encoding="mbcs",
         errors="strict",
     )
-    assert int(result.stdout), f"not a valid version: {result.stdout}"
+    try:
+        int(result.stdout)
+    except ValueError:
+        raise ValueError(f"not a valid version: {result.stdout}")
     return result.stdout[:3]
 
 
@@ -303,7 +308,8 @@ def build_deps_with_conan(
     install_libs: bool = True,
     announce: Optional[Callable[[AnyStr, int], None]] = None,
 ) -> ConanBuildInfo:
-    assert conanfile, "conanfile cannot be none"
+    if conanfile is None:
+        raise ValueError("conanfile cannot be None")
     verbose = False
     settings_yaml = os.path.join(conan_cache, "settings.yml")
     did_settings_yaml_already_exist = os.path.exists(settings_yaml)

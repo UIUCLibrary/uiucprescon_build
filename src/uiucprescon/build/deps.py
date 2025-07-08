@@ -5,7 +5,7 @@ import functools
 import os
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import sysconfig
 import warnings
@@ -126,7 +126,7 @@ def locate_dumpbin_using_vs_where() -> Optional[str]:
             subprocess.CalledProcessError, OSError, UnicodeDecodeError
         ):
             dumpbin_locations = (
-                subprocess.check_output(
+                subprocess.check_output(  # nosec B603
                     [
                         os.path.join(
                             root,
@@ -216,7 +216,7 @@ def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
         raise FileNotFoundError("Unable to locate dumpbin.exe")
 
     dumpbin_command = [dumpbin, "/nologo", "/dependents", library_path]
-    process = subprocess.run(
+    process = subprocess.run(  # nosec B603
         dumpbin_command,
         env={**os.environ.copy(), **visual_studio_info.return_env()},
         check=True,
@@ -235,9 +235,10 @@ def use_readelf_to_determine_deps(
         readelf = shutil.which("readelf")
         if readelf is None:
             raise FileNotFoundError("readelf not found")
-        return subprocess.run(
+        return subprocess.run(  # nosec B603
             [readelf, "-d", _library_path],
             check=True,
+            shell=False,
             capture_output=True,
             encoding="utf8",
         ).stdout
@@ -282,7 +283,12 @@ def fix_up_linux_libraries(
                 print(f"Copying {matching_library} to {copied_library}")
                 shutil.copy2(matching_library, output_path)
                 subprocess.run(
-                    [patchelf, "--set-rpath", "$ORIGIN", copied_library],
+                    [
+                        patchelf,
+                        "--set-rpath",
+                        "$ORIGIN",
+                        copied_library
+                    ],  # nosec B603
                     check=True,
                 )
                 fix_up_linux_libraries(
@@ -320,7 +326,7 @@ def fix_up_darwin_libraries(
         r"/"
         r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
     )
-    for line in subprocess.check_output(
+    for line in subprocess.check_output(  # nosec B603
         [otool, "-L", library], encoding="utf8"
     ).split("\n"):
         if any(
@@ -375,7 +381,7 @@ def fix_up_darwin_libraries(
             os.path.join("@loader_path", depending_library_name),
             str(library),
         ]
-        subprocess.check_call(command)
+        subprocess.check_call(command, shell=False)  # nosec B603
 
 
 def fix_up_windows_libraries(

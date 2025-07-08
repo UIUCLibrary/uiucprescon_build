@@ -73,7 +73,7 @@ def get_extension_build_info():
             if not os.path.exists(setup):
                 return {"extensions": []}
             code = tokenize.open(setup).read().replace("\r\n", "\n")
-            exec(code, {**locals(), **{"__file__": setup}})
+            exec(code, {**locals(), **{"__file__": setup}})  # nosec B102
             for root, dirs, files in os.walk("build"):
                 if len(os.path.split(root)) > 10:
                     raise FileNotFoundError(

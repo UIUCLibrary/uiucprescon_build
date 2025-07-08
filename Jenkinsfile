@@ -101,7 +101,7 @@ pipeline {
                                                         label: 'Run pydocstyle',
                                                         script: '''. ./venv/bin/activate
                                                                    mkdir -p reports/bandit
-                                                                   bandit --recursive src -f html -o reports/bandit/report.html
+                                                                   bandit -c pyproject.toml --recursive src -f html -o reports/bandit/report.html
                                                                 '''
                                                     )
                                                 }

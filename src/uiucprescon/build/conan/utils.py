@@ -2,7 +2,7 @@ import dataclasses
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
 from importlib.metadata import version
 from pathlib import Path
@@ -42,7 +42,9 @@ def fixup_library(shared_library: str) -> None:
             r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
         )
         for line in subprocess.check_output(
-            [otool, "-L", shared_library], encoding="utf8"
+            [otool, "-L", shared_library],
+                encoding="utf8",
+                shell=False  # nosec B603
         ).split("\n"):
             if any(
                 [
@@ -71,7 +73,7 @@ def fixup_library(shared_library: str) -> None:
                 os.path.join("@loader_path", library_name),
                 str(shared_library),
             ]
-            subprocess.check_call(command)
+            subprocess.check_call(command)  # nosec B603
 
 
 def copy_conan_imports_from_manifest(

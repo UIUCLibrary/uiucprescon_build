@@ -28,6 +28,8 @@ requires-python = ">=3.9"
 [project.entry-points."distutils.commands"]
 build_ext_info = "uiucprescon.build.introspection:BuildExtInfo"
 build_conan = "uiucprescon.build.conan_libs:BuildConan"
+[tool.bandit]
+exclude_dirs = ["tests", "src/uiucprescon/build/msvc"]
 
 [tool.setuptools.dynamic]
 version = {attr = "uiucprescon.build.VERSION"}
