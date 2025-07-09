@@ -1,7 +1,8 @@
+import dataclasses
 import io
 import os
 import json
-from typing import List, Dict, TypedDict, Iterable, Optional
+from typing import List, Dict, TypedDict, Iterable, Optional, Tuple
 import abc
 import warnings
 from uiucprescon.build.utils import locate_file
@@ -150,109 +151,120 @@ def locate_conanbuildinfo_json(search_locations: List[str]) -> Optional[str]:
     return locate_file("conanbuildinfo.json", search_locations)
 
 
-def _get_from_ref(reference_key: str, nodes):
-    include_paths = []
-    definitions = []
-    lib_dirs = []
-    bin_paths = []
-    libs = []
+@dataclasses.dataclass
+class CLibCompilerMetadata:
+    include_paths: List[str] = dataclasses.field(default_factory=list)
+    definitions: List[Tuple[str, Optional[str]]] =\
+        dataclasses.field(default_factory=list)
+    lib_dirs: List[str] = dataclasses.field(default_factory=list)
+    bin_paths: List[str] = dataclasses.field(default_factory=list)
+    libs: List[str] = dataclasses.field(default_factory=list)
+
+
+def _locate_node_by_id(reference_key, nodes):
     for node_key, node in nodes.items():
-        if node_key != reference_key:
+        if node_key == reference_key:
+            return node
+
+
+def _locate_node_by_name(name, nodes):
+    for node_key, node in nodes.items():
+        if node.get('name') == name:
+            return node_key, node
+    return None, None
+
+
+def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
+    metadata = CLibCompilerMetadata()
+    node = _locate_node_by_id(reference_key, nodes)
+    if not node:
+        raise ValueError(f"Node with {reference_key} not found")
+
+    for dep_key, dep_listing in node.get('dependencies', {}).items():
+        if dep_listing["skip"] is True:
             continue
-        for dep_key, dep in node.get('dependencies', {}).items():
-            data = _get_from_ref(dep_key, nodes)
-            include_paths += [
-                include_path for include_path
-                in data.get("include_paths", []) or []
+        dependency_metadata = _get_from_ref(dep_key, nodes)
+        if dep_listing["headers"] is True:
+            metadata.include_paths += [
+                include_path for include_path in
+                dependency_metadata.include_paths
                 if all([
-                    include_path not in include_paths,
+                    include_path not in metadata.include_paths,
                     os.path.exists(include_path)
                 ])
             ]
-
-            definitions += [
-                define for define in data.get("definitions", []) or []
-                if define not in definitions
-            ]
-
-            lib_dirs += [
-                lib_dir for lib_dir in data.get("lib_paths", []) or []
+        metadata.definitions += [
+            define for define in dependency_metadata.definitions
+            if define not in metadata.definitions
+        ]
+        if dep_listing['libs'] is True:
+            metadata.lib_dirs += [
+                lib_dir for lib_dir in dependency_metadata.lib_dirs
                 if all([
-                    lib_dir not in lib_dirs,
+                    lib_dir not in metadata.lib_dirs,
                     os.path.exists(lib_dir)
                 ])
             ]
 
-            bin_paths += [
-                bindir for bindir in data.get("bin_paths", []) or []
-                if all([
-                    bindir not in bin_paths,
-                    os.path.exists(bindir)
-                ])
+            metadata.libs += [
+                lib for lib in dependency_metadata.libs
+                if lib not in metadata.libs
             ]
+        metadata.bin_paths += [
+            bindir for bindir in dependency_metadata.bin_paths
+            if all([
+                bindir not in metadata.bin_paths,
+                os.path.exists(bindir)
+            ])
+        ]
 
-            libs += [
-                lib for lib in data.get("libs", []) or []
-                if lib not in libs
-            ]
+    for data in node.get('cpp_info', {}).values():
+        metadata.include_paths += [
+            include_path for include_path
+            in data.get("includedirs", []) or []
+            if all([
+                include_path not in metadata.include_paths,
+                os.path.exists(include_path)
+            ])
+        ]
 
-        for data in node.get('cpp_info', {}).values():
-            include_paths += [
-                include_path for include_path
-                in data.get("includedirs", []) or []
-                if all([
-                    include_path not in include_paths,
-                    os.path.exists(include_path)
-                ])
-            ]
+        metadata.definitions += [
+            (define, None) for define in data.get("defines", []) or []
+            if (define, None) not in metadata.definitions
+        ]
 
-            definitions += [
-                define for define in data.get("defines", []) or []
-                if define not in definitions
-            ]
+        metadata.lib_dirs += [
+            lib_dir for lib_dir in data.get("libdirs", []) or []
+            if all([
+                lib_dir not in metadata.lib_dirs,
+                os.path.exists(lib_dir)
+            ])
+        ]
 
-            lib_dirs += [
-                lib_dir for lib_dir in data.get("libdirs", []) or []
-                if all([
-                    lib_dir not in lib_dirs,
-                    os.path.exists(lib_dir)
-                ])
-            ]
+        metadata.bin_paths += [
+            bindir for bindir in data.get("bindirs", []) or []
+            if all([
+                bindir not in metadata.bin_paths,
+                os.path.exists(bindir)
+            ])
+        ]
 
-            bin_paths += [
-                bindir for bindir in data.get("bindirs", []) or []
-                if all([
-                    bindir not in bin_paths,
-                    os.path.exists(bindir)
-                ])
-            ]
+        metadata.libs += [
+            lib for lib in data.get("libs", []) or []
+            if lib not in metadata.libs
+        ]
+        metadata.libs += [
+            lib for lib in data.get("system_libs", []) or []
+            if lib not in metadata.libs
+        ]
 
-            libs += [
-                lib for lib in data.get("libs", []) or []
-                if lib not in libs
-            ]
-            libs += [
-                lib for lib in data.get("system_libs", []) or []
-                if lib not in libs
-            ]
-    return {
-        "definitions": definitions,
-        "include_paths": include_paths,
-        "lib_paths": lib_dirs,
-        "bin_paths": bin_paths,
-        "libs": libs,
-        "metadata": {},
-    }
+    return metadata
 
 
 def get_library_metadata_from_build_info_json(
     library_name, fp: io.TextIOWrapper
-):
-    definitions: List[str] = []
-    include_paths: List[str] = []
-    lib_dirs: List[str] = []
-    bin_paths: List[str] = []
-    libs: List[str] = []
+) -> Optional[CLibCompilerMetadata]:
+    metadata = CLibCompilerMetadata()
     original_position = fp.tell()
     try:
         fp.seek(0)
@@ -264,41 +276,32 @@ def get_library_metadata_from_build_info_json(
                 category=UserWarning,
             )
             return None
-        found = False
-        for key, node in data['graph']['nodes'].items():
-            if node.get('name') is None or node.get('name') != library_name:
-                continue
-            found = True
-            node_data = _get_from_ref(key, data['graph']['nodes'])
-            for include_path in reversed(node_data.get('include_paths', [])):
-                if include_path not in include_paths:
-                    include_paths.append(include_path)
-
-            for definition in reversed(node_data.get('defines', [])):
-                if definition not in definitions:
-                    definitions.append(definition)
-
-            for lib_dir in reversed(node_data.get('lib_paths', [])):
-                if lib_dir not in lib_dirs:
-                    lib_dirs.append(lib_dir)
-
-            for lib in reversed(node_data.get('libs', [])):
-                if lib not in libs:
-                    libs.append(lib)
-
-            for bin_path in reversed(node_data.get('bin_paths', [])):
-                if bin_path not in bin_paths:
-                    bin_paths.append(bin_path)
-        if not found:
+        nodes = data['graph']['nodes']
+        key, node = _locate_node_by_name(library_name, nodes)
+        if not node:
             return None
-        return {
-            "definitions": definitions,
-            "include_paths": include_paths,
-            "lib_paths": lib_dirs,
-            "bin_paths": bin_paths,
-            "libs": libs,
-            "metadata": {},
-        }
+        node_data = _get_from_ref(key, nodes)
+
+        for include_path in reversed(node_data.include_paths):
+            if include_path not in metadata.include_paths:
+                metadata.include_paths.append(include_path)
+
+        for definition in reversed(node_data.definitions):
+            if definition not in metadata.definitions:
+                metadata.definitions.append(definition)
+
+        for lib_dir in reversed(node_data.lib_dirs):
+            if lib_dir not in metadata.lib_dirs:
+                metadata.lib_dirs.append(lib_dir)
+
+        for lib in reversed(node_data.libs):
+            if lib not in metadata.libs:
+                metadata.libs.append(lib)
+
+        for bin_path in reversed(node_data.bin_paths):
+            if bin_path not in metadata.bin_paths:
+                metadata.bin_paths.append(bin_path)
+        return metadata
     finally:
         fp.seek(original_position)
 
