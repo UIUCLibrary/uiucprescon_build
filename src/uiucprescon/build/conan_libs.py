@@ -23,6 +23,7 @@ from setuptools.dist import Distribution
 from setuptools.command.build_ext import build_ext as BuildExt
 from setuptools.command.build_py import build_py as BuildPy
 from setuptools.command.build_clib import build_clib as BuildClib
+from setuptools.command.build import build as Build
 import toml
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import (
@@ -208,18 +209,22 @@ def match_libs(
                 original_position =\
                     extension.libraries.index(original_lib_name)
                 extension.libraries.remove(original_lib_name)
-                for lib in reversed(metadata["libs"]):
+
+                for lib in reversed(metadata.libs):
                     if lib not in extension.libraries:
                         extension.libraries.insert(original_position, lib)
-                for include_path in reversed(metadata["include_paths"]):
+
+                for include_path in reversed(metadata.include_paths):
                     if include_path not in extension.include_dirs:
                         extension.include_dirs.insert(0, include_path)
-                for lib_path in reversed(metadata["lib_paths"]):
+
+                for lib_path in reversed(metadata.lib_dirs):
                     if lib_path not in extension.library_dirs:
                         extension.library_dirs.insert(0, lib_path)
-                for define in reversed(metadata.get("definitions", [])):
-                    if define not in extension.define_macros:
-                        extension.define_macros.insert(0, (define, None))
+
+                for define_macro in reversed(metadata.definitions):
+                    if define_macro not in extension.define_macros:
+                        extension.define_macros.insert(0, define_macro)
 
 
 def add_all_libs(
@@ -318,23 +323,31 @@ class BuildConan(setuptools.Command):
         super().__init__(dist, **kw)
 
     def finalize_options(self) -> None:
-        build_clib = cast(BuildClib, self.get_finalized_command("build_clib"))
-        self.build_temp = os.path.join(build_clib.build_temp, "conan")
+        build_cmd = cast(Build, self.get_finalized_command("build"))
+
+        self.conan_home = os.path.join(build_cmd.build_base, "conan")
+        if not os.path.exists(self.conan_home):
+            self.mkpath(self.conan_home)
+
+        self.build_temp = os.path.join(build_cmd.build_temp, "conan_build")
         if not os.path.exists(self.build_temp):
             self.mkpath(self.build_temp)
+
         if self.conan_cache is None:
             if version("conan") < "2.0.0":
                 self.conan_cache = os.path.join(
-                    os.environ.get("CONAN_USER_HOME", self.build_temp),
+                    os.environ.get("CONAN_USER_HOME", self.conan_home),
                     ".conan"
                 )
             else:
                 self.conan_cache = os.path.join(
-                    os.environ.get("CONAN_USER_HOME", self.build_temp),
+                    os.environ.get("CONAN_USER_HOME", self.conan_home),
                     ".conan2"
                 )
+
         if self.compiler_libcxx is None:
             self.compiler_libcxx = os.getenv("CONAN_COMPILER_LIBCXX")
+
         if self.compiler_version is None:
             # This function section is ugly and should be refactored
             if version("conan") < "2.0.0":
