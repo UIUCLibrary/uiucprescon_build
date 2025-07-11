@@ -272,7 +272,7 @@ def use_patchelf_to_determine_deps(library, patchelf):
         "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
     ]
     deps = []
-    for dep in subprocess.run(
+    for dep in subprocess.run(  # nosec B603
             [patchelf, "--print-needed", library],
             check=True,
             text=True,
