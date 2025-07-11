@@ -2,6 +2,7 @@ import dataclasses
 import io
 import os
 import json
+import pprint
 from typing import List, Dict, TypedDict, Iterable, Optional, Tuple
 import abc
 import warnings
@@ -161,22 +162,46 @@ class CLibCompilerMetadata:
     libs: List[str] = dataclasses.field(default_factory=list)
 
 
-def _locate_node_by_id(reference_key, nodes):
+def locate_node_by_id(reference_key, nodes):
     for node_key, node in nodes.items():
         if node_key == reference_key:
             return node
+    return None
 
 
 def _locate_node_by_name(name, nodes):
     for node_key, node in nodes.items():
         if node.get('name') == name:
             return node_key, node
+        if cpp_info := node.get('cpp_info'):
+            root = cpp_info.get('root')
+            if root:
+                for lib in (root.get('libs') or []):
+                    if lib == name:
+                        return node_key, node
     return None, None
+
+
+def get_linking_libraries_fp(
+    library_name: str,
+    conan_build_info_fp: io.TextIOWrapper
+) -> List[str]:
+    original_position = conan_build_info_fp.tell()
+    try:
+        data = json.load(conan_build_info_fp)
+        _, node = _locate_node_by_name(library_name, data['graph']['nodes'])
+        pprint.pprint(node)
+        libs = []
+        for cpp_info in node['cpp_info'].values():
+            libs += cpp_info.get('libs', []) or []
+        return libs
+    finally:
+        conan_build_info_fp.seek(original_position)
 
 
 def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
     metadata = CLibCompilerMetadata()
-    node = _locate_node_by_id(reference_key, nodes)
+    node = locate_node_by_id(reference_key, nodes)
     if not node:
         raise ValueError(f"Node with {reference_key} not found")
 
@@ -282,23 +307,24 @@ def get_library_metadata_from_build_info_json(
             return None
         node_data = _get_from_ref(key, nodes)
 
-        for include_path in reversed(node_data.include_paths):
+        for include_path in node_data.include_paths:
             if include_path not in metadata.include_paths:
                 metadata.include_paths.append(include_path)
+                # metadata.include_paths.insert(0, include_path)
 
-        for definition in reversed(node_data.definitions):
+        for definition in node_data.definitions:
             if definition not in metadata.definitions:
                 metadata.definitions.append(definition)
 
-        for lib_dir in reversed(node_data.lib_dirs):
+        for lib_dir in node_data.lib_dirs:
             if lib_dir not in metadata.lib_dirs:
                 metadata.lib_dirs.append(lib_dir)
 
-        for lib in reversed(node_data.libs):
+        for lib in node_data.libs:
             if lib not in metadata.libs:
                 metadata.libs.append(lib)
 
-        for bin_path in reversed(node_data.bin_paths):
+        for bin_path in node_data.bin_paths:
             if bin_path not in metadata.bin_paths:
                 metadata.bin_paths.append(bin_path)
         return metadata

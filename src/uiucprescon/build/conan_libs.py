@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+import io
 import os
 import platform
 import re
@@ -13,27 +14,30 @@ from typing import Dict, List, Optional, cast, Set, Tuple, Union, TYPE_CHECKING
 
 
 from pathlib import Path
-from uiucprescon.build.deps import get_win_deps
-from uiucprescon.build.compiler_info import (
-    get_compiler_version,
-)
 import json
+import toml
+
 import setuptools
 from setuptools.dist import Distribution
 from setuptools.command.build_ext import build_ext as BuildExt
 from setuptools.command.build_py import build_py as BuildPy
 from setuptools.command.build_clib import build_clib as BuildClib
 from setuptools.command.build import build as Build
-import toml
+
+from uiucprescon.build.deps import get_win_deps
+from uiucprescon.build.compiler_info import (
+    get_compiler_version,
+)
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import (
     ConanBuildInfo, ConanBuildInfoParser,
-    get_library_metadata_from_build_info_json
+    get_library_metadata_from_build_info_json,
+    locate_node_by_id, get_linking_libraries_fp
 )
+from uiucprescon.build.conan.utils import LanguageStandardsVersion
 
 if TYPE_CHECKING:
     import distutils.ccompiler
-from uiucprescon.build.conan.utils import LanguageStandardsVersion
 
 __all__ = ["ConanBuildInfoParser"]
 
@@ -199,6 +203,7 @@ def match_libs(
     build_path: str
 ) -> None:
     build_json = os.path.join(build_path, "conan_build_info.json")
+
     with open(build_json, "r", encoding="utf-8") as f:
         libraries = extension.libraries.copy()
         for original_lib_name in libraries:
@@ -206,13 +211,23 @@ def match_libs(
                 original_lib_name,
                 f
             ):
-                original_position =\
-                    extension.libraries.index(original_lib_name)
-                extension.libraries.remove(original_lib_name)
+                # replace name of the library in case the actual name is
+                # different from the original
+                new_names = update_library_names(original_lib_name, f)
+                if len(new_names) > 0 \
+                    and (
+                        len(new_names) > 1 or new_names[0] != original_lib_name
+                ):
+                    original_position =\
+                        extension.libraries.index(original_lib_name)
+                    extension.libraries.remove(original_lib_name)
+                    for new_name in reversed(new_names):
+                        extension.libraries.insert(original_position, new_name)
 
-                for lib in reversed(metadata.libs):
-                    if lib not in extension.libraries:
-                        extension.libraries.insert(original_position, lib)
+                extension.libraries += [
+                    lib for lib in resolve_library_order(metadata.libs, f)
+                    if lib not in extension.libraries
+                ]
 
                 for include_path in reversed(metadata.include_paths):
                     if include_path not in extension.include_dirs:
@@ -465,6 +480,7 @@ class BuildConan(setuptools.Command):
                     extension.runtime_library_dirs.append("$ORIGIN")
             extensions.append(extension)
         build_ext_cmd.extensions = extensions
+        # breakpoint()
 
 
 def _get_source_root(dist: Distribution) -> str:
@@ -674,3 +690,96 @@ def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
         shutil.copy(file_path, dest, follow_symlinks=False)
         if file_path.is_symlink():
             continue
+
+
+def locate_node_deps(lib, nodes):
+    for ref, node in nodes.items():
+        cpp_info = node["cpp_info"]
+        for comp in cpp_info.values():
+            if comp['libs'] is None:
+                continue
+            if lib in comp['libs']:
+                return ref, node
+    return None, None
+
+
+def does_this_depend_on(library_name, other_library_name, nodes):
+    lib_ref, lib = locate_node_deps(library_name, nodes)
+    if lib is None:
+        return False
+
+    comparing_lib_ref, comparing_lib =\
+        locate_node_deps(other_library_name, nodes)
+
+    if comparing_lib is None:
+        return False
+    depend_libs = set()
+    for comp in comparing_lib['cpp_info'].values():
+        for comp_lib in (comp.get('libs', []) or []):
+            depend_libs.add(comp_lib)
+    for dep_ref in lib['dependencies']:
+        for dep in locate_node_by_id(dep_ref, nodes)['cpp_info'].values():
+            if any(
+                [dep_lib in depend_libs for dep_lib in (dep.get('libs') or [])]
+            ):
+                return True
+    return False
+
+
+def update_library_names(
+    library_name: str,
+    conan_build_info_fp: io.TextIOWrapper
+) -> List[str]:
+    return get_linking_libraries_fp(library_name, conan_build_info_fp)
+
+
+def resolve_library_order(
+    libraries: List[str],
+    conan_build_info_fp: io.TextIOWrapper
+) -> List[str]:
+    starting = conan_build_info_fp.tell()
+    original_number = len(libraries)
+    try:
+        conan_build_info_fp.seek(0)
+        data = json.load(conan_build_info_fp)
+        nodes = data['graph']['nodes']
+        attempt = 0
+        max_attempts = 10000
+        while True:
+            attempt += 1
+            if attempt > max_attempts:
+                raise RuntimeError(
+                    f"exceeded max resolve attempts: {max_attempts}"
+                )
+            ordered_deps: List[str] = []
+            for library_name in libraries:
+                lib = locate_node_deps(library_name, nodes)
+                if lib is None:
+                    print(f"Not found {library_name}")
+                    ordered_deps.append(library_name)
+                    continue
+                _, lib_metadata = lib
+                found_one = False
+                for sorted_lib in ordered_deps:
+                    if does_this_depend_on(library_name, sorted_lib, nodes):
+                        ordered_deps.insert(
+                            ordered_deps.index(sorted_lib),
+                            library_name
+                        )
+                        found_one = True
+                        break
+                if not found_one:
+                    ordered_deps.append(library_name)
+            if len(ordered_deps) != original_number:
+                raise RuntimeError(
+                    f"something went wrong sorting libraries. "
+                    f"Started with {original_number} and "
+                    f"now it is {len(ordered_deps)}")
+            if libraries == ordered_deps:
+                break
+
+            libraries = ordered_deps
+
+    finally:
+        conan_build_info_fp.seek(starting)
+    return ordered_deps

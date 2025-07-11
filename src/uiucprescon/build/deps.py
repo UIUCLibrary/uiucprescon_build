@@ -8,13 +8,14 @@ import re
 import subprocess  # nosec B404
 import sys
 import sysconfig
-import warnings
+import shutil
 from setuptools.msvc import EnvironmentInfo
 from typing import (
     List, Callable, Optional, Union, Set, Dict, cast, TYPE_CHECKING
 )
+import warnings
+
 from .msvc import msvc14_get_vc_env
-import shutil
 
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
@@ -262,6 +263,27 @@ def use_readelf_to_determine_deps(
     return deps
 
 
+def use_patchelf_to_determine_deps(library, patchelf):
+    if patchelf is None:
+        patchelf = shutil.which("patchelf")
+    if patchelf is None:
+        raise FileNotFoundError("patchelf not found")
+    system_libs = [
+        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    ]
+    deps = []
+    for dep in subprocess.run(
+            [patchelf, "--print-needed", library],
+            check=True,
+            text=True,
+            capture_output=True
+    ).stdout.split():
+        if any(dep.startswith(lib) for lib in system_libs):
+            continue
+        deps.append(dep)
+    return deps
+
+
 def fix_up_linux_libraries(
     library: str,
     search_paths: List[str],
@@ -271,7 +293,7 @@ def fix_up_linux_libraries(
     patchelf = shutil.which("patchelf")
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
-    for library in use_readelf_to_determine_deps(library):
+    for library in use_patchelf_to_determine_deps(library, patchelf=patchelf):
         if exclude_libraries and library in exclude_libraries:
             continue
         for path in search_paths:
@@ -282,14 +304,27 @@ def fix_up_linux_libraries(
             if not os.path.exists(copied_library):
                 print(f"Copying {matching_library} to {copied_library}")
                 shutil.copy2(matching_library, output_path)
+
                 subprocess.run(
                     [
                         patchelf,
                         "--set-rpath",
-                        "$ORIGIN",
+                        "'$ORIGIN'",
                         copied_library
                     ],  # nosec B603
                     check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                subprocess.run(
+                    [
+                        patchelf,
+                        "--shrink-rpath",
+                        copied_library
+                    ],  # nosec B603
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
                 fix_up_linux_libraries(
                     copied_library, search_paths, exclude_libraries
