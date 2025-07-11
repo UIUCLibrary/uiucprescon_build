@@ -6,7 +6,7 @@ from .local_backend import (
     build_editable,
 )
 
-VERSION = "0.2.6.dev14"
+VERSION = "0.2.6a14"
 
 __all__ = [
     "build_sdist",
