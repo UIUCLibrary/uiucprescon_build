@@ -328,7 +328,7 @@ class BuildConan(setuptools.Command):
         self.compiler_version: Optional[str] = None
         self.compiler_libcxx: Optional[str] = None
         self.target_os_version: Optional[str] = None
-        self.build_libs: List[str] = ['missing']
+        self.build_libs: List[str] = ["missing"]
         self.conanfile: Optional[str] = None
         self.arch = None
         self.build_temp: Optional[str] = None
@@ -441,8 +441,8 @@ class BuildConan(setuptools.Command):
         self.announce(f"Using {conan_cache} for conan cache", 5)
         conanfile = (
             self.conanfile or
-            _find_conanfile(path='.') or
-            os.path.abspath('.')
+            _find_conanfile(path=".") or
+            os.path.abspath(".")
         )
         metadata = build_deps_with_conan(
             conanfile=conanfile,
@@ -470,7 +470,7 @@ class BuildConan(setuptools.Command):
                 extension,
                 strategy=(
                     functools.partial(add_all_libs, text_md=metadata)
-                    if version('conan') < '2.0.0' else
+                    if version("conan") < "2.0.0" else
                     functools.partial(match_libs, build_path=self.build_temp)
                 )
             )
@@ -541,7 +541,7 @@ def build_conan(
 
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
         command.arch = config_settings.get("arch")
-        if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
+        if version("conan") > "2.0.0" and "MSC" in platform.python_compiler():
             from uiucprescon.build.conan.v2 import get_msvc_compiler_version
             command.compiler_version = get_msvc_compiler_version()
         else:
@@ -550,7 +550,7 @@ def build_conan(
             )
         if version("conan") > "2.0.0":
             command.language_standards = LanguageStandardsVersion(
-                cpp_std=config_settings.get('cxx_std')
+                cpp_std=config_settings.get("cxx_std")
             )
 
     if conan_cache is None:
@@ -697,9 +697,9 @@ def locate_node_deps(lib, nodes):
     for ref, node in nodes.items():
         cpp_info = node["cpp_info"]
         for comp in cpp_info.values():
-            if comp['libs'] is None:
+            if comp["libs"] is None:
                 continue
-            if lib in comp['libs']:
+            if lib in comp["libs"]:
                 return ref, node
     return None, None
 
@@ -715,10 +715,10 @@ def find_linking_libraries_with_conan_build_info_json(conan_build_info):
     if not os.path.exists(conan_build_info):
         raise FileNotFoundError("Missing required file conan_build_info.json.")
 
-    with open(conan_build_info, "r", encoding='utf-8') as f:
+    with open(conan_build_info, "r", encoding="utf-8") as f:
         build_data = read_conan_build_info_json(f)
         return build_data[
-            'bin_paths' if sys.platform == "win32" else 'lib_paths'
+            "bin_paths" if sys.platform == "win32" else "lib_paths"
         ]
 
 

@@ -27,14 +27,14 @@ DEPS_REGEX = (
 
 
 def get_platform() -> str:
-    if os.name == 'nt':
+    if os.name == "nt":
         TARGET_TO_PLAT = {
-            'x86': 'win32',
-            'x64': 'win-amd64',
-            'arm': 'win-arm32',
-            'arm64': 'win-arm64',
+            "x86": "win32",
+            "x64": "win-amd64",
+            "arm": "win-arm32",
+            "arm64": "win-arm64",
         }
-        target = os.environ.get('VSCMD_ARG_TGT_ARCH')
+        target = os.environ.get("VSCMD_ARG_TGT_ARCH")
         return TARGET_TO_PLAT.get(target) or sysconfig.get_platform()
     return sysconfig.get_platform()
 

@@ -13,8 +13,8 @@ def test_update_extension2():
     text_metadata = {
         "include_paths": [],
         "lib_paths": [],
-        "libs": ['eggs'],
-        "metadata": {'eggs': {"libs": []}}
+        "libs": ["eggs"],
+        "metadata": {"eggs": {"libs": []}}
     }
     conan_libs.update_extension2(extension, text_metadata)
     assert "eggs" in extension.libraries

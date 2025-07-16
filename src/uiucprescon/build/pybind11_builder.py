@@ -86,7 +86,7 @@ class BuildPybind11Extension(build_ext):
         conan_info_dir = os.environ.get("CONAN_BUILD_INFO_DIR")
         if conan_info_dir:
             conanfileinfo_locations.insert(0, conan_info_dir)
-        if version('conan') < "2.0":
+        if version("conan") < "2.0":
             conanbuildinfo = locate_file(
                 "conanbuildinfo.txt", conanfileinfo_locations
             )
