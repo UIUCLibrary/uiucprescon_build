@@ -254,6 +254,14 @@ pipeline {
                                                         script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
                                                     )
                                                 }
+                                                script{
+                                                    timeout(time: 1, unit: 'HOURS') {
+                                                        def sonarqubeResult = waitForQualityGate(abortPipeline: false, credentialsId: params.SONARCLOUD_TOKEN)
+                                                        if (sonarqubeResult.status != 'OK') {
+                                                           unstable "SonarQube quality gate: ${sonarqubeResult.status}"
+                                                       }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
