@@ -31,8 +31,10 @@ from uiucprescon.build.compiler_info import (
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import (
     ConanBuildInfo, ConanBuildInfoParser,
+    read_conan_build_info_json,
+    parse_conan_build_info,
     get_library_metadata_from_build_info_json,
-    locate_node_by_id, get_linking_libraries_fp
+    get_linking_libraries_fp
 )
 from uiucprescon.build.conan.utils import LanguageStandardsVersion
 
@@ -225,7 +227,7 @@ def match_libs(
                         extension.libraries.insert(original_position, new_name)
 
                 extension.libraries += [
-                    lib for lib in resolve_library_order(metadata.libs, f)
+                    lib for lib in metadata.libs
                     if lib not in extension.libraries
                 ]
 
@@ -326,7 +328,7 @@ class BuildConan(setuptools.Command):
         self.compiler_version: Optional[str] = None
         self.compiler_libcxx: Optional[str] = None
         self.target_os_version: Optional[str] = None
-        self.build_libs: List[str] = ['missing']
+        self.build_libs: List[str] = ["missing"]
         self.conanfile: Optional[str] = None
         self.arch = None
         self.build_temp: Optional[str] = None
@@ -377,7 +379,7 @@ class BuildConan(setuptools.Command):
                             get_msvc_compiler_version(self.build_temp)
 
     def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
-        for root, dirs, files in os.walk(root_dir):
+        for root, _, files in os.walk(root_dir):
             for f in files:
                 if f == "conanbuildinfo.json":
                     return os.path.join(root, f)
@@ -439,8 +441,8 @@ class BuildConan(setuptools.Command):
         self.announce(f"Using {conan_cache} for conan cache", 5)
         conanfile = (
             self.conanfile or
-            _find_conanfile(path='.') or
-            os.path.abspath('.')
+            _find_conanfile(path=".") or
+            os.path.abspath(".")
         )
         metadata = build_deps_with_conan(
             conanfile=conanfile,
@@ -468,7 +470,7 @@ class BuildConan(setuptools.Command):
                 extension,
                 strategy=(
                     functools.partial(add_all_libs, text_md=metadata)
-                    if version('conan') < '2.0.0' else
+                    if version("conan") < "2.0.0" else
                     functools.partial(match_libs, build_path=self.build_temp)
                 )
             )
@@ -480,7 +482,6 @@ class BuildConan(setuptools.Command):
                     extension.runtime_library_dirs.append("$ORIGIN")
             extensions.append(extension)
         build_ext_cmd.extensions = extensions
-        # breakpoint()
 
 
 def _get_source_root(dist: Distribution) -> str:
@@ -540,7 +541,7 @@ def build_conan(
 
         command.compiler_libcxx = config_settings.get("conan_compiler_libcxx")
         command.arch = config_settings.get("arch")
-        if version("conan") > "2.0.0" and 'MSC' in platform.python_compiler():
+        if version("conan") > "2.0.0" and "MSC" in platform.python_compiler():
             from uiucprescon.build.conan.v2 import get_msvc_compiler_version
             command.compiler_version = get_msvc_compiler_version()
         else:
@@ -549,7 +550,7 @@ def build_conan(
             )
         if version("conan") > "2.0.0":
             command.language_standards = LanguageStandardsVersion(
-                cpp_std=config_settings.get('cxx_std')
+                cpp_std=config_settings.get("cxx_std")
             )
 
     if conan_cache is None:
@@ -673,7 +674,7 @@ def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
                 continue
 
             try:
-                file_name, hash_value = line.strip().split(": ")
+                file_name, _ = line.strip().split(": ")
             except ValueError:
                 print(f"Failed to parse: {line.strip()}")
                 raise
@@ -696,34 +697,11 @@ def locate_node_deps(lib, nodes):
     for ref, node in nodes.items():
         cpp_info = node["cpp_info"]
         for comp in cpp_info.values():
-            if comp['libs'] is None:
+            if comp["libs"] is None:
                 continue
-            if lib in comp['libs']:
+            if lib in comp["libs"]:
                 return ref, node
     return None, None
-
-
-def does_this_depend_on(library_name, other_library_name, nodes):
-    lib_ref, lib = locate_node_deps(library_name, nodes)
-    if lib is None:
-        return False
-
-    comparing_lib_ref, comparing_lib =\
-        locate_node_deps(other_library_name, nodes)
-
-    if comparing_lib is None:
-        return False
-    depend_libs = set()
-    for comp in comparing_lib['cpp_info'].values():
-        for comp_lib in (comp.get('libs', []) or []):
-            depend_libs.add(comp_lib)
-    for dep_ref in lib['dependencies']:
-        for dep in locate_node_by_id(dep_ref, nodes)['cpp_info'].values():
-            if any(
-                [dep_lib in depend_libs for dep_lib in (dep.get('libs') or [])]
-            ):
-                return True
-    return False
 
 
 def update_library_names(
@@ -733,53 +711,23 @@ def update_library_names(
     return get_linking_libraries_fp(library_name, conan_build_info_fp)
 
 
-def resolve_library_order(
-    libraries: List[str],
-    conan_build_info_fp: io.TextIOWrapper
-) -> List[str]:
-    starting = conan_build_info_fp.tell()
-    original_number = len(libraries)
-    try:
-        conan_build_info_fp.seek(0)
-        data = json.load(conan_build_info_fp)
-        nodes = data['graph']['nodes']
-        attempt = 0
-        max_attempts = 10000
-        while True:
-            attempt += 1
-            if attempt > max_attempts:
-                raise RuntimeError(
-                    f"exceeded max resolve attempts: {max_attempts}"
-                )
-            ordered_deps: List[str] = []
-            for library_name in libraries:
-                lib = locate_node_deps(library_name, nodes)
-                if lib is None:
-                    print(f"Not found {library_name}")
-                    ordered_deps.append(library_name)
-                    continue
-                _, lib_metadata = lib
-                found_one = False
-                for sorted_lib in ordered_deps:
-                    if does_this_depend_on(library_name, sorted_lib, nodes):
-                        ordered_deps.insert(
-                            ordered_deps.index(sorted_lib),
-                            library_name
-                        )
-                        found_one = True
-                        break
-                if not found_one:
-                    ordered_deps.append(library_name)
-            if len(ordered_deps) != original_number:
-                raise RuntimeError(
-                    f"something went wrong sorting libraries. "
-                    f"Started with {original_number} and "
-                    f"now it is {len(ordered_deps)}")
-            if libraries == ordered_deps:
-                break
+def find_linking_libraries_with_conan_build_info_json(conan_build_info):
+    if not os.path.exists(conan_build_info):
+        raise FileNotFoundError("Missing required file conan_build_info.json.")
 
-            libraries = ordered_deps
+    with open(conan_build_info, "r", encoding="utf-8") as f:
+        build_data = read_conan_build_info_json(f)
+        return build_data[
+            "bin_paths" if sys.platform == "win32" else "lib_paths"
+        ]
 
-    finally:
-        conan_build_info_fp.seek(starting)
-    return ordered_deps
+
+def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
+    if not os.path.exists(conanbuildinfo):
+        raise FileNotFoundError(
+            f"Missing required file {conanbuildinfo}"
+        )
+    return parse_conan_build_info(
+        conanbuildinfo,
+        "bindirs" if sys.platform == "win32" else "libdirs"
+    )

@@ -9,11 +9,12 @@ import subprocess  # nosec B404
 import sys
 import sysconfig
 import shutil
-from setuptools.msvc import EnvironmentInfo
 from typing import (
     List, Callable, Optional, Union, Set, Dict, cast, TYPE_CHECKING
 )
 import warnings
+
+from setuptools.msvc import EnvironmentInfo
 
 from .msvc import msvc14_get_vc_env
 
@@ -26,14 +27,14 @@ DEPS_REGEX = (
 
 
 def get_platform() -> str:
-    if os.name == 'nt':
+    if os.name == "nt":
         TARGET_TO_PLAT = {
-            'x86': 'win32',
-            'x64': 'win-amd64',
-            'arm': 'win-arm32',
-            'arm64': 'win-arm64',
+            "x86": "win32",
+            "x64": "win-amd64",
+            "arm": "win-arm32",
+            "arm64": "win-arm64",
         }
-        target = os.environ.get('VSCMD_ARG_TGT_ARCH')
+        target = os.environ.get("VSCMD_ARG_TGT_ARCH")
         return TARGET_TO_PLAT.get(target) or sysconfig.get_platform()
     return sysconfig.get_platform()
 
@@ -58,6 +59,7 @@ def parse_dumpbin_data(data: str) -> List[str]:
 
 
 def parse_dumpbin_deps(file: str) -> List[str]:
+    warnings.warn("No need to use this anymore", DeprecationWarning)
     with open(file) as f:
         return parse_dumpbin_data(f.read())
 
@@ -170,8 +172,8 @@ def locate_dumpbin(
     if strategy is not None:
         return strategy()
 
-    for strategy in FIND_DUMPBIN_STRATEGIES_DEFAULT_ORDER:
-        dumpbin_exe = strategy()
+    for default_strategy in FIND_DUMPBIN_STRATEGIES_DEFAULT_ORDER:
+        dumpbin_exe = default_strategy()
         if dumpbin_exe is not None:
             return dumpbin_exe
     return None
@@ -303,7 +305,7 @@ def fix_up_linux_libraries(
             copied_library = os.path.join(output_path, library)
             if not os.path.exists(copied_library):
                 print(f"Copying {matching_library} to {copied_library}")
-                shutil.copy2(matching_library, output_path)
+                shutil.copy2(matching_library, copied_library)
 
                 subprocess.run(
                     [

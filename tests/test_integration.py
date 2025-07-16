@@ -9,7 +9,7 @@ def test_conan_integration(tmp_path, monkeypatch):
 
     home = tmp_path / "home"
 
-    setup_py = source_root / 'setup.py'
+    setup_py = source_root / "setup.py"
     setup_py.write_text("""
 from setuptools import setup
 from pybind11.setup_helpers import Pybind11Extension
@@ -60,4 +60,4 @@ class Dummy(ConanFile):
     monkeypatch.chdir(source_root)
     monkeypatch.setenv("HOME", str(home))
     build.build_wheel(str(output))
-    assert any(f.startswith('dummy') for f in os.listdir(output))
+    assert any(f.startswith("dummy") for f in os.listdir(output))

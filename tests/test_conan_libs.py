@@ -13,8 +13,8 @@ def test_update_extension2():
     text_metadata = {
         "include_paths": [],
         "lib_paths": [],
-        "libs": ['eggs'],
-        "metadata": {'eggs': {"libs": []}}
+        "libs": ["eggs"],
+        "metadata": {"eggs": {"libs": []}}
     }
     conan_libs.update_extension2(extension, text_metadata)
     assert "eggs" in extension.libraries
@@ -46,20 +46,3 @@ conan_options=[]
     """)
     monkeypatch.chdir(source_root)
     conan_libs.get_conan_options()
-
-
-# def test_build_deps_with_conan_calls_install(tmp_path, monkeypatch):
-#     build_dir = tmp_path / "build"
-#     install_dir = tmp_path / "install"
-#     conan_cache = tmp_path / "conan_cache"
-#     build_dir.mkdir()
-#     conan_object = Mock()
-#     monkeypatch.setattr(conan_libs.conan_api, "Conan", Mock(return_value=conan_object))
-#     conan_libs.build_deps_with_conan(
-#         build_dir,
-#         install_dir,
-#         "libstdc",
-#         "14.3",
-#         conan_cache=conan_cache
-#     )
-#     assert conan_object.install.called

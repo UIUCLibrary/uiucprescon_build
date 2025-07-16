@@ -2,8 +2,7 @@ import dataclasses
 import io
 import os
 import json
-import pprint
-from typing import List, Dict, TypedDict, Iterable, Optional, Tuple
+from typing import List, Dict, TypedDict, Iterable, Optional, Tuple, Set
 import abc
 import warnings
 from uiucprescon.build.utils import locate_file
@@ -190,7 +189,6 @@ def get_linking_libraries_fp(
     try:
         data = json.load(conan_build_info_fp)
         _, node = _locate_node_by_name(library_name, data['graph']['nodes'])
-        pprint.pprint(node)
         libs = []
         for cpp_info in node['cpp_info'].values():
             libs += cpp_info.get('libs', []) or []
@@ -204,44 +202,6 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
     node = locate_node_by_id(reference_key, nodes)
     if not node:
         raise ValueError(f"Node with {reference_key} not found")
-
-    for dep_key, dep_listing in node.get('dependencies', {}).items():
-        if dep_listing["skip"] is True:
-            continue
-        dependency_metadata = _get_from_ref(dep_key, nodes)
-        if dep_listing["headers"] is True:
-            metadata.include_paths += [
-                include_path for include_path in
-                dependency_metadata.include_paths
-                if all([
-                    include_path not in metadata.include_paths,
-                    os.path.exists(include_path)
-                ])
-            ]
-        metadata.definitions += [
-            define for define in dependency_metadata.definitions
-            if define not in metadata.definitions
-        ]
-        if dep_listing['libs'] is True:
-            metadata.lib_dirs += [
-                lib_dir for lib_dir in dependency_metadata.lib_dirs
-                if all([
-                    lib_dir not in metadata.lib_dirs,
-                    os.path.exists(lib_dir)
-                ])
-            ]
-
-            metadata.libs += [
-                lib for lib in dependency_metadata.libs
-                if lib not in metadata.libs
-            ]
-        metadata.bin_paths += [
-            bindir for bindir in dependency_metadata.bin_paths
-            if all([
-                bindir not in metadata.bin_paths,
-                os.path.exists(bindir)
-            ])
-        ]
 
     for data in node.get('cpp_info', {}).values():
         metadata.include_paths += [
@@ -273,14 +233,58 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
                 os.path.exists(bindir)
             ])
         ]
+        for lib in (data.get("libs", []) or []):
+            if lib not in metadata.libs:
+                metadata.libs.append(lib)
+            else:
+                del metadata.libs[metadata.libs.index(lib)]
+                metadata.libs.append(lib)
+        for lib in (data.get("system_libs", []) or []):
+            if lib not in metadata.libs:
+                metadata.libs.append(lib)
+            else:
+                del metadata.libs[metadata.libs.index(lib)]
+                metadata.libs.append(lib)
 
-        metadata.libs += [
-            lib for lib in data.get("libs", []) or []
-            if lib not in metadata.libs
+    for dep_key, dep_listing in node.get('dependencies', {}).items():
+        if dep_listing["skip"] is True:
+            continue
+        dependency_metadata = _get_from_ref(dep_key, nodes)
+        if dep_listing["headers"] is True:
+            metadata.include_paths += [
+                include_path for include_path in
+                dependency_metadata.include_paths
+                if all([
+                    include_path not in metadata.include_paths,
+                    os.path.exists(include_path)
+                ])
+            ]
+        metadata.definitions += [
+            define for define in dependency_metadata.definitions
+            if define not in metadata.definitions
         ]
-        metadata.libs += [
-            lib for lib in data.get("system_libs", []) or []
-            if lib not in metadata.libs
+        if dep_listing['libs'] is True:
+            metadata.lib_dirs += [
+                lib_dir for lib_dir in dependency_metadata.lib_dirs
+                if all([
+                    lib_dir not in metadata.lib_dirs,
+                    os.path.exists(lib_dir)
+                ])
+            ]
+
+            for lib in dependency_metadata.libs:
+                if lib not in metadata.libs:
+                    metadata.libs.append(lib)
+                    continue
+                del metadata.libs[metadata.libs.index(lib)]
+                metadata.libs.append(lib)
+
+        metadata.bin_paths += [
+            bindir for bindir in dependency_metadata.bin_paths
+            if all([
+                bindir not in metadata.bin_paths,
+                os.path.exists(bindir)
+            ])
         ]
 
     return metadata
@@ -322,6 +326,9 @@ def get_library_metadata_from_build_info_json(
 
         for lib in node_data.libs:
             if lib not in metadata.libs:
+                metadata.libs.append(lib)
+            else:
+                del metadata.libs[metadata.libs.index(lib)]
                 metadata.libs.append(lib)
 
         for bin_path in node_data.bin_paths:
@@ -385,3 +392,25 @@ def read_conan_build_info_json(fp: io.TextIOWrapper):
         "libs": libs,
         "metadata": {},
     }
+
+
+def parse_conan_build_info(
+        conan_build_info_file: str, section: str
+) -> Set[str]:
+    items = set()
+    with open(conan_build_info_file, encoding="utf-8") as f:
+        found = False
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            if line.strip() == f"[{section}]":
+                found = True
+                continue
+            if found:
+                if line.strip() == "":
+                    found = False
+                    continue
+                if found:
+                    items.add(line.strip())
+    return items

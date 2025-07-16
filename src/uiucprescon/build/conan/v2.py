@@ -274,8 +274,6 @@ def get_msvc_compiler_version(
     if not os.path.exists(exec_file) or force_rebuild:
         exec_file = build_msvc_compiler_version_exec(exec_file)
         print(f"Built {exec_file}")
-    else:
-        print(f"Using existing {exec_file}")
 
     result = subprocess.run(  # nosec B603
         [exec_file],

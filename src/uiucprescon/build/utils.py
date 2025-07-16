@@ -1,7 +1,7 @@
 from typing import Optional, List
 import os
 
-__all__ = ['locate_file']
+__all__ = ["locate_file"]
 
 
 def locate_file(file_name: str, search_locations: List[str]) -> Optional[str]:
