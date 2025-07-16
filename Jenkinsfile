@@ -3,6 +3,15 @@ library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
    remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
    ])
 
+def get_sonarqube_unresolved_issues(report_task_file){
+    script{
+
+        def props = readProperties  file: report_task_file
+        def response = httpRequest url : props['serverUrl'] + '/api/issues/search?componentKeys=' + props['projectKey'] + '&resolved=no'
+        def outstandingIssues = readJSON text: response.content
+        return outstandingIssues
+    }
+}
 
 pipeline {
     agent none
@@ -259,6 +268,11 @@ pipeline {
                                                         def sonarqubeResult = waitForQualityGate(abortPipeline: false, credentialsId: params.SONARCLOUD_TOKEN)
                                                         if (sonarqubeResult.status != 'OK') {
                                                            unstable "SonarQube quality gate: ${sonarqubeResult.status}"
+                                                        }
+                                                        if(env.BRANCH_IS_PRIMARY){
+                                                           def outstandingIssues = get_sonarqube_unresolved_issues('.scannerwork/report-task.txt')
+                                                           writeJSON file: 'reports/sonar-report.json', json: outstandingIssues
+                                                           recordIssues(tools: [sonarQube(pattern: 'reports/sonar-report.json')])
                                                        }
                                                     }
                                                 }
