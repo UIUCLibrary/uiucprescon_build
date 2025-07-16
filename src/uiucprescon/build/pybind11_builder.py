@@ -1,14 +1,20 @@
 from __future__ import annotations
 import abc
+from importlib.metadata import version
+import os
 import sys
-from typing import Optional, cast, List, Set, TYPE_CHECKING
-import pybind11
-from pybind11.setup_helpers import Pybind11Extension, build_ext
-from uiucprescon.build.utils import locate_file
+from typing import Optional, cast, List, TYPE_CHECKING
+
 from setuptools.command.build_py import build_py as BuildPy
 from setuptools.extension import Extension
 from setuptools.command.build_clib import build_clib as BuildClib
-import os
+
+import pybind11
+from pybind11.setup_helpers import Pybind11Extension, build_ext
+
+from uiucprescon.build.utils import locate_file
+from uiucprescon.build import deps, conan_libs
+from uiucprescon.build.conan.files import parse_conan_build_info
 
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
@@ -18,6 +24,17 @@ class AbsFindLibrary(abc.ABC):
     @abc.abstractmethod
     def locate(self, library_name: str) -> Optional[str]:
         """Abstract method for locating a library."""
+
+
+def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
+    if not os.path.exists(conanbuildinfo):
+        raise FileNotFoundError(
+            f"Missing required file {conanbuildinfo}"
+        )
+    return parse_conan_build_info(
+        conanbuildinfo,
+        "bindirs" if sys.platform == "win32" else "libdirs"
+    )
 
 
 class BuildPybind11Extension(build_ext):
@@ -69,30 +86,64 @@ class BuildPybind11Extension(build_ext):
         conan_info_dir = os.environ.get("CONAN_BUILD_INFO_DIR")
         if conan_info_dir:
             conanfileinfo_locations.insert(0, conan_info_dir)
-
-        conanbuildinfo = locate_file(
-            "conanbuildinfo.txt", conanfileinfo_locations
-        )
-
-        if conanbuildinfo:
-            strategies.insert(
-                0, UseConanFileBuildInfo(path=os.path.dirname(conanbuildinfo))
+        if version('conan') < "2.0":
+            conanbuildinfo = locate_file(
+                "conanbuildinfo.txt", conanfileinfo_locations
             )
+
+            if conanbuildinfo:
+                strategies.insert(
+                    0,
+                    UseConanFileBuildInfo(path=os.path.dirname(conanbuildinfo))
+                )
         missing_libs = set(ext.libraries)
+        system_libs = ["pthread", "m"]
         for lib in ext.libraries:
+            if lib in system_libs:
+                missing_libs.remove(lib)
+
             for strategy in strategies:
                 if strategy.locate(lib) is not None:
-                    missing_libs.remove(lib)
+                    if lib in missing_libs:
+                        missing_libs.remove(lib)
                     break
         return list(missing_libs)
 
+    def _get_linking_library_paths(self):
+        build_conan = self.get_finalized_command("build_conan")
+        if version("conan") < "2.0":
+            return find_linking_libraries_with_conanbuildinfo_txt(
+                os.path.join(build_conan.build_temp, "conanbuildinfo.txt")
+            )
+        conan_build_info_locations = [
+            self.build_temp,
+            os.path.join(self.build_temp, "Release"),
+            build_conan.build_temp,
+        ]
+        for location in conan_build_info_locations:
+            conan_build_info =\
+                os.path.join(location, "conan_build_info.json")
+            if os.path.exists(conan_build_info):
+                break
+        else:
+            raise FileNotFoundError(
+                f"Missing file conan_build_info.json. "
+                f"Searched locations {*conan_build_info_locations, }"
+            )
+
+        return conan_libs.find_linking_libraries_with_conan_build_info_json(
+            conan_build_info
+        )
+
     def build_extension(self, ext: Pybind11Extension) -> None:
-        self._add_conan_libs_to_ext(ext)
-        self.compiler: CCompiler
         super().build_extension(ext)
         fullname = self.get_ext_fullname(ext.name)
         created_extension = os.path.join(
             self.build_lib, self.get_ext_filename(fullname)
+        )
+        deps.fixup_library(
+            created_extension,
+            self._get_linking_library_paths()
         )
         if sys.platform == "darwin":
             self.spawn(["otool", "-L", created_extension])
@@ -166,25 +217,3 @@ class UseConanFileBuildInfo(AbsFindLibrary):
             return None
         libs = parse_conan_build_info(conan_build_info, "libs")
         return library_name if library_name in libs else None
-
-
-def parse_conan_build_info(
-    conan_build_info_file: str, section: str
-) -> Set[str]:
-    items = set()
-    with open(conan_build_info_file, encoding="utf-8") as f:
-        found = False
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            if line.strip() == f"[{section}]":
-                found = True
-                continue
-            if found:
-                if line.strip() == "":
-                    found = False
-                    continue
-                if found:
-                    items.add(line.strip())
-    return items
