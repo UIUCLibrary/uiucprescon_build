@@ -55,7 +55,7 @@ class Dummy(ConanFile):
     """)
 
     output = tmp_path / "output"
-    with open(pyproject) as f:
+    with open(pyproject, "r", encoding="utf-8") as f:
         print(f.read())
     monkeypatch.chdir(source_root)
     monkeypatch.setenv("HOME", str(home))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import abc
+import warnings
 from importlib.metadata import version
 import os
 import sys
@@ -199,6 +200,7 @@ class BuildPybind11Extension(build_ext):
 
 class UseSetuptoolsCompilerFileLibrary(AbsFindLibrary):
     def __init__(self, compiler: CCompiler, dirs: List[str]) -> None:
+        warnings.warn("Pending removal", DeprecationWarning)
         self.compiler = compiler
         self.dirs = dirs
 

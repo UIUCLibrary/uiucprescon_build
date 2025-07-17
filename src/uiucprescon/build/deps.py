@@ -51,7 +51,7 @@ def parse_dumpbin_data(data: str) -> List[str]:
         print(data, file=sys.stderr)
         raise ValueError("unable to parse dumpbin file")
     for x in d.group(0).split("\n"):
-        if x.strip() == "":
+        if not x.strip():
             continue
         dll = x.strip()
         dlls.append(dll)
@@ -60,21 +60,40 @@ def parse_dumpbin_data(data: str) -> List[str]:
 
 def parse_dumpbin_deps(file: str) -> List[str]:
     warnings.warn("No need to use this anymore", DeprecationWarning)
-    with open(file) as f:
+    with open(file, "r", encoding="utf-8") as f:
         return parse_dumpbin_data(f.read())
 
 
-WINDOWS_SYSTEM_DLLS = [
+WINDOWS_SYSTEM_DLLS = {
     "ADVAPI32.dll",
     "CRYPT32.dll",
-    "KERNEL32.dll",
-    "USER32.dll",
-    "WS2_32.dll",
     "GDI32.dll",
-]
+    "KERNEL32.dll",
+    "MSVCP140.dll",
+    "USER32.dll",
+    "VCRUNTIME140.dll",
+    "VCRUNTIME140_1.dll",
+    "WS2_32.dll",
+}
+
+
+def remove_windows_system_libs(libs: List[str]) -> List[str]:
+    non_system_dlls = []
+    for lib in libs:
+        if lib.startswith("api-ms-win-crt"):
+            continue
+
+        if lib.startswith("python"):
+            continue
+
+        if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+            continue
+        non_system_dlls.append(lib)
+    return non_system_dlls
 
 
 def remove_system_dlls(dlls: List[str]) -> List[str]:
+    warnings.warn("use remove_windows_system_libs instead", DeprecationWarning)
     non_system_dlls = []
     for dll in dlls:
         if dll.startswith("api-ms-win-crt"):
@@ -342,9 +361,9 @@ def fix_up_darwin_libraries(
     library: str,
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
+    install_name_tool = shutil.which("install_name_tool"),
+    otool = shutil.which("otool"),
 ) -> None:
-    otool = shutil.which("otool")
-    install_name_tool = shutil.which("install_name_tool")
     if not all([otool, install_name_tool]):
         raise FileNotFoundError(
             "Unable to fixed up because required tools are missing. "
@@ -368,7 +387,7 @@ def fix_up_darwin_libraries(
     ).split("\n"):
         if any(
             [
-                line.strip() == "",  # it's an empty line
+                not line.strip(),  # it's an empty line
                 str(library) in line,  # it's the same library
                 "/usr/lib/" in line,  # it's a system library
                 "/System/Library/Frameworks/" in line,  # it's a system library
@@ -429,7 +448,7 @@ def fix_up_windows_libraries(
         [str], List[str]
     ] = use_dumpbin_to_determine_deps,
 ) -> None:
-    depending_libraries = remove_system_dlls(
+    depending_libraries = remove_windows_system_libs(
         determine_dependencies_strategy(library)
     )
     output_path = os.path.dirname(library)

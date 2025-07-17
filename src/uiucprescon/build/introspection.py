@@ -51,16 +51,17 @@ class BuildExtInfo(Command):
                 }
             )
         with open(
-            os.path.join(self.build_dir, "setuptools_introspection.json"), "w"
+            os.path.join(self.build_dir, "setuptools_introspection.json"),
+            "w",
+            encoding="utf-8"
         ) as f:
             json_string = json.dumps(
                 data, indent=4
             )  # indent for pretty printing
             f.write(json_string)
 
-
 def get_extension_build_info():
-    og = sys.argv
+    og = sys.argv.copy()
     setuptools_introspection = None
     try:
         sys.argv = [
@@ -90,7 +91,7 @@ def get_extension_build_info():
                     "unable to find setuptools_introspection.json file. "
                 )
 
+        with open(setuptools_introspection, "r", encoding="utf-8") as f:
+            return json.load(f)
     finally:
         sys.argv = og
-    with open(setuptools_introspection, "r") as f:
-        return json.load(f)

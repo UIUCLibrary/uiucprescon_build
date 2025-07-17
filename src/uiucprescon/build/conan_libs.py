@@ -11,7 +11,7 @@ import abc
 from importlib.metadata import version
 import typing
 from typing import Dict, List, Optional, cast, Set, Tuple, Union, TYPE_CHECKING
-
+import warnings
 
 from pathlib import Path
 import json
@@ -158,7 +158,7 @@ class ConanBuildMetadata:
     def __init__(self, filename: str) -> None:
         super().__init__()
         self.filename = filename
-        with open(self.filename) as f:
+        with open(self.filename, "r", encoding="utf-8") as f:
             self._data = json.loads(f.read())
 
     def deps(self) -> List[Dict[str, str]]:
@@ -379,6 +379,7 @@ class BuildConan(setuptools.Command):
                             get_msvc_compiler_version(self.build_temp)
 
     def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
+        warnings.warn("Don't use", DeprecationWarning)
         for root, _, files in os.walk(root_dir):
             for f in files:
                 if f == "conanbuildinfo.json":
@@ -430,7 +431,7 @@ class BuildConan(setuptools.Command):
                 )
         else:
             install_dir = build_ext.build_temp
-        # build_dir = os.path.join(build_clib.build_temp, "conan")
+
         build_dir_full_path = os.path.abspath(self.build_temp)
         conan_cache = self.conan_cache
         if conan_cache and not os.path.exists(conan_cache):
@@ -582,7 +583,7 @@ def build_conan(
 
 def get_pyproject_toml_data() -> Dict[str, typing.Any]:
     pyproj_toml = Path("pyproject.toml")
-    with open(pyproj_toml) as f:
+    with open(pyproj_toml, "r", encoding="utf-8") as f:
         return toml.load(f)
 
 
@@ -642,7 +643,7 @@ def fixup_library(shared_library: str) -> None:
         ).split("\n"):
             if any(
                 [
-                    line.strip() == "",  # it's an empty line
+                    not line.strip(),  # it's an empty line
                     str(shared_library) in line,  # it's the same library
                     "/usr/lib/" in line,  # it's a system library
                 ]
