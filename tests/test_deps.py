@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from uiucprescon.build import deps
@@ -68,3 +70,96 @@ Tag        Type                         Name/Value
     assert deps.use_readelf_to_determine_deps(
         "foo.so", run_readelf_strategy=dummy_readelf
     ) == ["bar.so"]
+
+# def test_fix_up_darwin_libraries():
+#     deps.fix_up_darwin_libraries(
+#         "openjp2",
+#         search_paths=[],
+#         install_name_tool="dummy_install_name_tool",
+#         otool="dummy_otool"
+#     )
+
+def test_otool_subprocess(monkeypatch):
+    run = Mock()
+    monkeypatch.setattr(deps.subprocess, "run", run)
+    deps.otool_subprocess("openjp2", "otool_exec")
+    assert run.call_args[0][0] == ["otool_exec","-L", 'openjp2']
+@pytest.mark.parametrize(
+    "library_name, otool_output, expected_list",
+    [
+        (
+            "/Users/testUser/.conan2/p/b/tessec2b892a8fd9b9/p/lib/libtesseract.5.5.0.dylib",
+            """
+/Users/testUser/.conan2/p/b/tessec2b892a8fd9b9/p/lib/libtesseract.5.5.0.dylib:
+@rpath/libtesseract.5.5.dylib (compatibility version 5.5.0, current version 5.5.0)
+/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)
+@rpath/libleptonica.6.dylib (compatibility version 6.0.0, current version 6.0.0)
+/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1900.180.0)
+""".lstrip(),
+            [('@rpath', 'libtesseract.5.5.dylib'), ('@rpath', 'libleptonica.6.dylib')]
+        ),
+        (
+            "/usr/local/opt/imagemagick/lib/libMagick++-7.Q16HDRI.5.dylib",
+            """
+/usr/local/opt/imagemagick/lib/libMagick++-7.Q16HDRI.5.dylib (compatibility version 6.0.0, current version 6.0.0)
+/usr/local/Cellar/imagemagick/7.1.2-0/lib/libMagickCore-7.Q16HDRI.10.dylib (compatibility version 11.0.0, current version 11.2.0)
+/usr/local/Cellar/imagemagick/7.1.2-0/lib/libMagickWand-7.Q16HDRI.10.dylib (compatibility version 11.0.0, current version 11.2.0)
+/usr/local/opt/little-cms2/lib/liblcms2.2.dylib (compatibility version 3.0.0, current version 3.17.0)
+/usr/local/opt/liblqr/lib/liblqr-1.0.dylib (compatibility version 4.0.0, current version 4.2.0)
+/usr/local/opt/glib/lib/libglib-2.0.0.dylib (compatibility version 8401.0.0, current version 8401.3.0)
+/usr/local/opt/gettext/lib/libintl.8.dylib (compatibility version 13.0.0, current version 13.4.0)
+/usr/lib/libxml2.2.dylib (compatibility version 10.0.0, current version 10.9.0)
+/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib (compatibility version 17.0.0, current version 17.0.0)
+/usr/local/opt/freetype/lib/libfreetype.6.dylib (compatibility version 27.0.0, current version 27.2.0)
+/usr/lib/libbz2.1.0.dylib (compatibility version 1.0.0, current version 1.0.8)
+/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.12)
+/usr/local/opt/libtool/lib/libltdl.7.dylib (compatibility version 11.0.0, current version 11.3.0)
+/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1345.120.2)
+/usr/local/opt/libomp/lib/libomp.dylib (compatibility version 5.0.0, current version 5.0.0)
+/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1700.255.5)
+""".lstrip(),
+            [
+                ("/usr/local/Cellar/imagemagick/7.1.2-0/lib", "libMagickCore-7.Q16HDRI.10.dylib"),
+                ("/usr/local/Cellar/imagemagick/7.1.2-0/lib", "libMagickWand-7.Q16HDRI.10.dylib"),
+                ("/usr/local/opt/little-cms2/lib", "liblcms2.2.dylib"),
+                ("/usr/local/opt/liblqr/lib", "liblqr-1.0.dylib"),
+                ("/usr/local/opt/glib/lib", "libglib-2.0.0.dylib"),
+                ("/usr/local/opt/gettext/lib", "libintl.8.dylib"),
+                ("/usr/local/opt/fontconfig/lib", "libfontconfig.1.dylib"),
+                ("/usr/local/opt/freetype/lib", "libfreetype.6.dylib"),
+                ("/usr/local/opt/libtool/lib", "libltdl.7.dylib"),
+                ("/usr/local/opt/libomp/lib", "libomp.dylib"),
+            ]
+        )
+    ]
+)
+def test_iter_otool_lib_dependencies(library_name, otool_output, expected_list):
+    assert list(deps.iter_otool_lib_dependencies(
+        library_name,
+        otool_get_shared_libs_strategy=lambda *_: otool_output
+    )) == expected_list
+
+def test_change_mac_lib_shared_library_name(monkeypatch):
+    check_call = Mock()
+    monkeypatch.setattr(deps.subprocess, "check_call", check_call)
+    deps.change_mac_lib_dependency_shared_library_name(
+        "build/myproject/libspamuser.so",
+        "/usr/local/opt/spam/libspam.5.5.dylib",
+        "eggs.dylib",
+        "/usr/bin/install_name_tool"
+    )
+    assert check_call.call_args[0][0] == [
+        "/usr/bin/install_name_tool",
+        "-change",
+        "/usr/local/opt/spam/libspam.5.5.dylib",
+        "@loader_path/eggs.dylib",
+        "build/myproject/libspamuser.so"
+    ]
+
+def test_iter_otool_lib_dependencies_get_bad_parse():
+    with pytest.raises(ValueError) as e:
+        list(deps.iter_otool_lib_dependencies(
+            "spam",
+            otool_get_shared_libs_strategy=lambda *_: "bad unparsible output"
+        ))
+    assert "unable to parse" in str(e)

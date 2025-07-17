@@ -284,7 +284,7 @@ def use_readelf_to_determine_deps(
     return deps
 
 
-def use_patchelf_to_determine_deps(library, patchelf):
+def use_patchelf_to_determine_deps(library: str, patchelf) -> List[str]:
     if patchelf is None:
         patchelf = shutil.which("patchelf")
     if patchelf is None:
@@ -314,14 +314,17 @@ def fix_up_linux_libraries(
     patchelf = shutil.which("patchelf")
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
-    for library in use_patchelf_to_determine_deps(library, patchelf=patchelf):
-        if exclude_libraries and library in exclude_libraries:
+    for dependent_library in use_patchelf_to_determine_deps(
+        library,
+        patchelf=patchelf
+    ):
+        if exclude_libraries and dependent_library in exclude_libraries:
             continue
         for path in search_paths:
-            matching_library = os.path.join(path, library)
+            matching_library = os.path.join(path, dependent_library)
             if not os.path.exists(matching_library):
                 continue
-            copied_library = os.path.join(output_path, library)
+            copied_library = os.path.join(output_path, dependent_library)
             if not os.path.exists(copied_library):
                 print(f"Copying {matching_library} to {copied_library}")
                 shutil.copy2(matching_library, copied_library)
@@ -357,12 +360,65 @@ def fix_up_linux_libraries(
             )
 
 
+def otool_subprocess(library: str, otool_exec: str) -> str:
+    return subprocess.check_output(  # nosec B603
+        [otool_exec, "-L", library],
+        encoding="utf8"
+    )
+
+
+def iter_otool_lib_dependencies(
+    library: str,
+    otool_get_shared_libs_strategy: Callable[[str], str],
+):
+    regex = r"^(?P<path>([@a-zA-Z./0-9-_+])+)"\
+            r"/"\
+            r"(?P<file>lib[a-zA-Z/.0-9+-]+\.dylib)"
+    dylib_regex = re.compile(regex)
+    for line in otool_get_shared_libs_strategy(library).split("\n"):
+        if any(
+            [
+                not line.strip(),  # it's an empty line
+                str(library) in line,  # it's the same library
+                "/usr/lib/" in line,  # it's a system library
+                "/System/" in line,  # it's a system library
+            ]
+        ):
+            continue
+        value = dylib_regex.match(line.strip())
+        if value:
+            try:
+                original_path = value.group("path")
+                depending_library_name = value["file"].strip()
+                yield original_path, depending_library_name
+            except AttributeError as e:
+                raise ValueError(f"unable to parse {line}") from e
+        else:
+            raise ValueError(f"unable to parse {line}")
+
+
+def change_mac_lib_dependency_shared_library_name(
+    library: str,
+    original_depending_library: str,
+    new_depending_library_name: str,
+    install_name_tool_exec: str
+) -> None:
+    command = [
+        install_name_tool_exec,
+        "-change",
+        original_depending_library,
+        os.path.join("@loader_path", new_depending_library_name),
+        str(library),
+    ]
+    subprocess.check_call(command, shell=False)  # nosec B603
+
+
 def fix_up_darwin_libraries(
     library: str,
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-    install_name_tool = shutil.which("install_name_tool"),
-    otool = shutil.which("otool"),
+    install_name_tool=shutil.which("install_name_tool"),
+    otool=shutil.which("otool"),
 ) -> None:
     if not all([otool, install_name_tool]):
         raise FileNotFoundError(
@@ -377,32 +433,10 @@ def fix_up_darwin_libraries(
     otool = cast(str, otool)
     install_name_tool = cast(str, install_name_tool)
 
-    dylib_regex = re.compile(
-        r"^(?P<path>([@a-zA-Z./_])+)"
-        r"/"
-        r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
-    )
-    for line in subprocess.check_output(  # nosec B603
-        [otool, "-L", library], encoding="utf8"
-    ).split("\n"):
-        if any(
-            [
-                not line.strip(),  # it's an empty line
-                str(library) in line,  # it's the same library
-                "/usr/lib/" in line,  # it's a system library
-                "/System/Library/Frameworks/" in line,  # it's a system library
-            ]
-        ):
-            continue
-        value = dylib_regex.match(line.strip())
-        if value:
-            try:
-                original_path = value.group("path")
-                depending_library_name = value["file"].strip()
-            except AttributeError as e:
-                raise ValueError(f"unable to parse {line}") from e
-        else:
-            raise ValueError(f"unable to parse {line}")
+    for original_path, depending_library_name in iter_otool_lib_dependencies(
+        library,
+        functools.partial(otool_subprocess, otool_exec=otool)
+    ):
         if exclude_libraries:
             if depending_library_name.lower() in {
                 lib.lower() for lib in exclude_libraries
@@ -429,15 +463,12 @@ def fix_up_darwin_libraries(
                     "unable to find matching library: "
                     f"{depending_library_name}"
                 )
-
-        command = [
-            install_name_tool,
-            "-change",
+        change_mac_lib_dependency_shared_library_name(
+            library,
             os.path.join(original_path, depending_library_name),
-            os.path.join("@loader_path", depending_library_name),
-            str(library),
-        ]
-        subprocess.check_call(command, shell=False)  # nosec B603
+            depending_library_name,
+            install_name_tool
+        )
 
 
 def fix_up_windows_libraries(

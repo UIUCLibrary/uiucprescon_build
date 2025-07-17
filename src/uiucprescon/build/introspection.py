@@ -60,6 +60,7 @@ class BuildExtInfo(Command):
             )  # indent for pretty printing
             f.write(json_string)
 
+
 def get_extension_build_info():
     og = sys.argv.copy()
     setuptools_introspection = None
