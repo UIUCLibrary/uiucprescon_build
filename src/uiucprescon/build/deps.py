@@ -58,7 +58,7 @@ def parse_dumpbin_data(data: str) -> List[str]:
     return dlls
 
 
-def parse_dumpbin_deps(file: str) -> List[str]:
+def parse_dumpbin_deps(file: str) -> List[str]:  # pragma: no cover
     warnings.warn("No need to use this anymore", DeprecationWarning)
     with open(file, "r", encoding="utf-8") as f:
         return parse_dumpbin_data(f.read())
@@ -92,7 +92,7 @@ def remove_windows_system_libs(libs: List[str]) -> List[str]:
     return non_system_dlls
 
 
-def remove_system_dlls(dlls: List[str]) -> List[str]:
+def remove_system_dlls(dlls: List[str]) -> List[str]:  # pragma: no cover
     warnings.warn("use remove_windows_system_libs instead", DeprecationWarning)
     non_system_dlls = []
     for dll in dlls:
@@ -119,7 +119,7 @@ def locate_dumpbin_via_path2() -> Optional[str]:
     return None
 
 
-def locate_dumpbin_via_path() -> Optional[str]:
+def locate_dumpbin_via_path() -> Optional[str]:  # pragma: no cover
     warnings.warn("Use locate_dumpbin_via_path2 instead", DeprecationWarning)
     vc_env = msvc14_get_vc_env(get_platform())
     for path in vc_env.get("path", "").split(";"):
@@ -200,7 +200,7 @@ def locate_dumpbin(
 
 def get_win_deps(
     dll_name: str, output_file: str, compiler: CCompiler
-) -> List[str]:
+) -> List[str]:  # pragma: no cover
     warnings.warn(
         "get_win_deps is deprecated, use "
         "use_dumpbin_to_determine_deps instead",
@@ -296,7 +296,8 @@ def is_linux_system_libraries(library: str) -> bool:
     system_libs = [
         "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
     ]
-    if any(library.startswith(system_lib) for system_lib in system_libs):
+    if any(os.path.basename(library).startswith(system_lib)
+           for system_lib in system_libs):
         return True
     return False
 
@@ -310,13 +311,13 @@ def use_patchelf_to_determine_deps(library: str, patchelf) -> List[str]:
         dep for dep in run_patchelf_needed(
             library,
             patchelf,
-            lambda args: subprocess.run(
+            lambda args: subprocess.run(  # nosec B603
                 args,
                 check=True,
                 text=True,
                 capture_output=True
             ).stdout
-        ).split() if not is_linux_system_libraries(library)
+        ).split() if not is_linux_system_libraries(dep)
     ]
 
 

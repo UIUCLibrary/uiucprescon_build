@@ -378,7 +378,9 @@ class BuildConan(setuptools.Command):
                         self.compiler_version =\
                             get_msvc_compiler_version(self.build_temp)
 
-    def getConanBuildInfo(self, root_dir: str) -> Optional[str]:
+    def getConanBuildInfo(
+        self, root_dir: str
+    ) -> Optional[str]:  # pragma: no cover
         warnings.warn("Don't use", DeprecationWarning)
         for root, _, files in os.walk(root_dir):
             for f in files:
@@ -621,7 +623,7 @@ def build_deps_with_conan(
     )
 
 
-def fixup_library(shared_library: str) -> None:
+def fixup_library(shared_library: str) -> None:  # pragma: no cover
     warnings.warn(
         "use uiucprescon.build.deps.fixup_library instead",
         DeprecationWarning
@@ -671,7 +673,9 @@ def fixup_library(shared_library: str) -> None:
             subprocess.check_call(command)  # nosec B603
 
 
-def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
+def add_conan_imports(
+    import_manifest_file: str, path: str, dest: str
+) -> None:  # pragma: no cover
     warnings.warn("Don't use", DeprecationWarning)
     libs: List[str] = []
     with open(import_manifest_file, "r", encoding="utf8") as f:
