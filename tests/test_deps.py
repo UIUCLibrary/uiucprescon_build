@@ -221,3 +221,10 @@ def test_run_patchelf_needed(monkeypatch):
 )
 def test_is_linux_system_libraries(library, expected):
     assert deps.is_linux_system_libraries(library) == expected
+
+def test_deploy_darwin_shared_lib(monkeypatch):
+    copy2 = Mock()
+    monkeypatch.setattr(deps.shutil, "copy2", copy2)
+    fix_up_strategy = Mock()
+    deps.deploy_darwin_shared_lib("start", "dest", fix_up_strategy)
+    fix_up_strategy.assert_called_once_with("dest")
