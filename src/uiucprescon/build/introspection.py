@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import cast
+from typing import cast, Optional
 import tokenize
 import json
 from setuptools import Command
@@ -13,6 +13,7 @@ class BuildExtInfo(Command):
     A command to build the extension and return build information.
     This is a placeholder for the actual implementation.
     """
+    build_dir: Optional[str]
 
     description = "Build the extension and return build information."
 
@@ -26,15 +27,27 @@ class BuildExtInfo(Command):
             build_ext_cmd = cast(
                 build_ext, self.get_finalized_command("build_ext")
             )
-            self.build_dir = os.path.join(
-                build_ext_cmd.build_temp, "setuptools_introspection"
-            )
+            if build_ext_cmd.build_temp is None:
+                self.warn(
+                    "build_ext.build_temp was not set and will "
+                    "affect BuildExtInfo"
+                )
+                self.build_dir = "build"
+            else:
+                build_ext_build_dir: str = build_ext_cmd.build_temp
+                self.build_dir = os.path.join(
+                    build_ext_build_dir, "setuptools_introspection"
+                )
 
     def run(self) -> None:
         """Run the command to build the extension."""
         print("inspecting setup.py...")
-        if not os.path.exists(self.build_dir):
-            self.mkpath(self.build_dir)
+        if self.build_dir is None:
+            self.warn("build_dir was not set")
+            return
+        build_dir: str = self.build_dir
+        if not os.path.exists(build_dir):
+            self.mkpath(build_dir)
 
         build_ext_cmd = cast(
             build_ext, self.get_finalized_command("build_ext")
@@ -51,7 +64,9 @@ class BuildExtInfo(Command):
                 }
             )
         with open(
-            os.path.join(self.build_dir, "setuptools_introspection.json"), "w"
+            os.path.join(build_dir, "setuptools_introspection.json"),
+            "w",
+            encoding="utf-8"
         ) as f:
             json_string = json.dumps(
                 data, indent=4
@@ -60,7 +75,7 @@ class BuildExtInfo(Command):
 
 
 def get_extension_build_info():
-    og = sys.argv
+    og = sys.argv.copy()
     setuptools_introspection = None
     try:
         sys.argv = [
@@ -90,7 +105,7 @@ def get_extension_build_info():
                     "unable to find setuptools_introspection.json file. "
                 )
 
+        with open(setuptools_introspection, "r", encoding="utf-8") as f:
+            return json.load(f)
     finally:
         sys.argv = og
-    with open(setuptools_introspection, "r") as f:
-        return json.load(f)

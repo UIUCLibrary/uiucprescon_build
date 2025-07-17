@@ -3,6 +3,15 @@ library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
    remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
    ])
 
+def get_sonarqube_unresolved_issues(report_task_file){
+    script{
+
+        def props = readProperties  file: report_task_file
+        def response = httpRequest url : props['serverUrl'] + '/api/issues/search?componentKeys=' + props['projectKey'] + '&resolved=no'
+        def outstandingIssues = readJSON text: response.content
+        return outstandingIssues
+    }
+}
 
 pipeline {
     agent none
@@ -170,8 +179,26 @@ pipeline {
                                                     }
                                                     post{
                                                         always{
-                                                            recordIssues(tools: [pyLint(pattern: 'reports/pylint.txt')])
+                                                            recordIssues(tools: [pyLint(pattern: 'reports/pylint.txt')], name: 'PyLint', id: 'PyLint')
                                                             stash includes: 'reports/pylint_issues.txt,reports/pylint.txt', name: 'PYLINT_REPORT'
+                                                        }
+                                                    }
+                                                }
+                                                stage('Ruff') {
+                                                    steps{
+                                                        catchError(buildResult: 'SUCCESS', message: 'Ruff found issues', stageResult: 'UNSTABLE') {
+                                                            sh(
+                                                             label: 'Running Ruff',
+                                                             script: '''. ./venv/bin/activate
+                                                                        ruff check --config=pyproject.toml -o reports/ruffoutput.txt --output-format pylint --exit-zero
+                                                                        ruff check --config=pyproject.toml -o reports/ruffoutput.json --output-format json
+                                                                    '''
+                                                             )
+                                                        }
+                                                    }
+                                                    post{
+                                                        always{
+                                                            recordIssues(tools: [pyLint(pattern: 'reports/ruffoutput.txt', name: 'Ruff', id: 'Ruff')])
                                                         }
                                                     }
                                                 }
@@ -251,8 +278,21 @@ pipeline {
                                                 withSonarQubeEnv(installationName: 'sonarcloud', credentialsId: params.SONARCLOUD_TOKEN) {
                                                     sh(
                                                         label: 'Running Sonar Scanner',
-                                                        script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
+                                                        script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
                                                     )
+                                                }
+                                                script{
+                                                    timeout(time: 1, unit: 'HOURS') {
+                                                        def sonarqubeResult = waitForQualityGate(abortPipeline: false, credentialsId: params.SONARCLOUD_TOKEN)
+                                                        if (sonarqubeResult.status != 'OK') {
+                                                           unstable "SonarQube quality gate: ${sonarqubeResult.status}"
+                                                        }
+                                                        if(env.BRANCH_IS_PRIMARY){
+                                                           def outstandingIssues = get_sonarqube_unresolved_issues('.scannerwork/report-task.txt')
+                                                           writeJSON file: 'reports/sonar-report.json', json: outstandingIssues
+                                                           recordIssues(tools: [sonarQube(pattern: 'reports/sonar-report.json')])
+                                                       }
+                                                    }
                                                 }
                                             }
                                         }

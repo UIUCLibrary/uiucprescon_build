@@ -1,5 +1,6 @@
 from __future__ import annotations
 import abc
+import warnings
 from importlib.metadata import version
 import os
 import sys
@@ -141,6 +142,7 @@ class BuildPybind11Extension(build_ext):
         created_extension = os.path.join(
             self.build_lib, self.get_ext_filename(fullname)
         )
+
         deps.fixup_library(
             created_extension,
             self._get_linking_library_paths()
@@ -198,7 +200,10 @@ class BuildPybind11Extension(build_ext):
 
 
 class UseSetuptoolsCompilerFileLibrary(AbsFindLibrary):
-    def __init__(self, compiler: CCompiler, dirs: List[str]) -> None:
+    def __init__(
+        self, compiler: CCompiler, dirs: List[str]
+    ) -> None:  # pragma: no cover
+        warnings.warn("Pending removal", DeprecationWarning)
         self.compiler = compiler
         self.dirs = dirs
 

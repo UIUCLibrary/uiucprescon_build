@@ -2,6 +2,7 @@ from uiucprescon.build import conan_libs
 from setuptools import Extension
 import sys
 
+
 def test_update_extension2():
     extension = Extension(
         name="spam",
@@ -18,6 +19,7 @@ def test_update_extension2():
     }
     conan_libs.update_extension2(extension, text_metadata)
     assert "eggs" in extension.libraries
+
 
 def test_get_conan_options(tmp_path, monkeypatch):
     source_root = tmp_path / "source"

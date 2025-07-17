@@ -9,6 +9,7 @@ pybind11
 pydocstyle
 pytest
 pylint
+ruff
 sphinx
 tox
 types-toml

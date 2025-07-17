@@ -10,14 +10,13 @@ import sys
 import sysconfig
 import shutil
 from typing import (
-    List, Callable, Optional, Union, Set, Dict, cast, TYPE_CHECKING
+    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple
 )
 import warnings
 
 from setuptools.msvc import EnvironmentInfo
 
 from .msvc import msvc14_get_vc_env
-
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
 
@@ -51,30 +50,49 @@ def parse_dumpbin_data(data: str) -> List[str]:
         print(data, file=sys.stderr)
         raise ValueError("unable to parse dumpbin file")
     for x in d.group(0).split("\n"):
-        if x.strip() == "":
+        if not x.strip():
             continue
         dll = x.strip()
         dlls.append(dll)
     return dlls
 
 
-def parse_dumpbin_deps(file: str) -> List[str]:
+def parse_dumpbin_deps(file: str) -> List[str]:  # pragma: no cover
     warnings.warn("No need to use this anymore", DeprecationWarning)
-    with open(file) as f:
+    with open(file, "r", encoding="utf-8") as f:
         return parse_dumpbin_data(f.read())
 
 
-WINDOWS_SYSTEM_DLLS = [
+WINDOWS_SYSTEM_DLLS = {
     "ADVAPI32.dll",
     "CRYPT32.dll",
-    "KERNEL32.dll",
-    "USER32.dll",
-    "WS2_32.dll",
     "GDI32.dll",
-]
+    "KERNEL32.dll",
+    "MSVCP140.dll",
+    "USER32.dll",
+    "VCRUNTIME140.dll",
+    "VCRUNTIME140_1.dll",
+    "WS2_32.dll",
+}
 
 
-def remove_system_dlls(dlls: List[str]) -> List[str]:
+def remove_windows_system_libs(libs: List[str]) -> List[str]:
+    non_system_dlls = []
+    for lib in libs:
+        if lib.startswith("api-ms-win-crt"):
+            continue
+
+        if lib.startswith("python"):
+            continue
+
+        if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+            continue
+        non_system_dlls.append(lib)
+    return non_system_dlls
+
+
+def remove_system_dlls(dlls: List[str]) -> List[str]:  # pragma: no cover
+    warnings.warn("use remove_windows_system_libs instead", DeprecationWarning)
     non_system_dlls = []
     for dll in dlls:
         if dll.startswith("api-ms-win-crt"):
@@ -100,7 +118,7 @@ def locate_dumpbin_via_path2() -> Optional[str]:
     return None
 
 
-def locate_dumpbin_via_path() -> Optional[str]:
+def locate_dumpbin_via_path() -> Optional[str]:  # pragma: no cover
     warnings.warn("Use locate_dumpbin_via_path2 instead", DeprecationWarning)
     vc_env = msvc14_get_vc_env(get_platform())
     for path in vc_env.get("path", "").split(";"):
@@ -181,7 +199,7 @@ def locate_dumpbin(
 
 def get_win_deps(
     dll_name: str, output_file: str, compiler: CCompiler
-) -> List[str]:
+) -> List[str]:  # pragma: no cover
     warnings.warn(
         "get_win_deps is deprecated, use "
         "use_dumpbin_to_determine_deps instead",
@@ -265,25 +283,41 @@ def use_readelf_to_determine_deps(
     return deps
 
 
-def use_patchelf_to_determine_deps(library, patchelf):
+def run_patchelf_needed(
+    library: str,
+    patchelf_exec: str,
+    command_executor: Callable[[List[str]], str]
+) -> str:
+    return command_executor([patchelf_exec, "--print-needed", library])
+
+
+def is_linux_system_libraries(library: str) -> bool:
+    system_libs = [
+        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    ]
+    if any(os.path.basename(library).startswith(system_lib)
+           for system_lib in system_libs):
+        return True
+    return False
+
+
+def use_patchelf_to_determine_deps(library: str, patchelf) -> List[str]:
     if patchelf is None:
         patchelf = shutil.which("patchelf")
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    return [
+        dep for dep in run_patchelf_needed(
+            library,
+            patchelf,
+            lambda args: subprocess.run(  # nosec B603
+                args,
+                check=True,
+                text=True,
+                capture_output=True
+            ).stdout
+        ).split() if not is_linux_system_libraries(dep)
     ]
-    deps = []
-    for dep in subprocess.run(  # nosec B603
-            [patchelf, "--print-needed", library],
-            check=True,
-            text=True,
-            capture_output=True
-    ).stdout.split():
-        if any(dep.startswith(lib) for lib in system_libs):
-            continue
-        deps.append(dep)
-    return deps
 
 
 def fix_up_linux_libraries(
@@ -295,14 +329,17 @@ def fix_up_linux_libraries(
     patchelf = shutil.which("patchelf")
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
-    for library in use_patchelf_to_determine_deps(library, patchelf=patchelf):
-        if exclude_libraries and library in exclude_libraries:
+    for dependent_library in use_patchelf_to_determine_deps(
+        library,
+        patchelf=patchelf
+    ):
+        if exclude_libraries and dependent_library in exclude_libraries:
             continue
         for path in search_paths:
-            matching_library = os.path.join(path, library)
+            matching_library = os.path.join(path, dependent_library)
             if not os.path.exists(matching_library):
                 continue
-            copied_library = os.path.join(output_path, library)
+            copied_library = os.path.join(output_path, dependent_library)
             if not os.path.exists(copied_library):
                 print(f"Copying {matching_library} to {copied_library}")
                 shutil.copy2(matching_library, copied_library)
@@ -338,40 +375,28 @@ def fix_up_linux_libraries(
             )
 
 
-def fix_up_darwin_libraries(
-    library: str,
-    search_paths: List[str],
-    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-) -> None:
-    otool = shutil.which("otool")
-    install_name_tool = shutil.which("install_name_tool")
-    if not all([otool, install_name_tool]):
-        raise FileNotFoundError(
-            "Unable to fixed up because required tools are missing. "
-            "Make sure that otool and install_name_tool are on "
-            "the PATH."
-        )
-
-    # Hack: Casting the following to strings to help MyPy which doesn't
-    #  currently (as of mypy version 1.6.0) understand that if they any
-    #  were None, they'd raise a FileNotFound error.
-    otool = cast(str, otool)
-    install_name_tool = cast(str, install_name_tool)
-
-    dylib_regex = re.compile(
-        r"^(?P<path>([@a-zA-Z./_])+)"
-        r"/"
-        r"(?P<file>lib[a-zA-Z/.0-9]+\.dylib)"
+def otool_subprocess(library: str, otool_exec: str) -> str:
+    return subprocess.check_output(  # nosec B603
+        [otool_exec, "-L", library],
+        encoding="utf8"
     )
-    for line in subprocess.check_output(  # nosec B603
-        [otool, "-L", library], encoding="utf8"
-    ).split("\n"):
+
+
+def iter_otool_lib_dependencies(
+    library: str,
+    otool_get_shared_libs_strategy: Callable[[str], str],
+) -> Iterable[Tuple[str, str]]:
+    regex = r"^(?P<path>([@a-zA-Z./0-9-_+])+)"\
+            r"/"\
+            r"(?P<file>lib[a-zA-Z/.0-9+-]+\.dylib)"
+    dylib_regex = re.compile(regex)
+    for line in otool_get_shared_libs_strategy(library).split("\n"):
         if any(
             [
-                line.strip() == "",  # it's an empty line
+                not line.strip(),  # it's an empty line
                 str(library) in line,  # it's the same library
                 "/usr/lib/" in line,  # it's a system library
-                "/System/Library/Frameworks/" in line,  # it's a system library
+                "/System/" in line,  # it's a system library
             ]
         ):
             continue
@@ -380,29 +405,77 @@ def fix_up_darwin_libraries(
             try:
                 original_path = value.group("path")
                 depending_library_name = value["file"].strip()
+                yield original_path, depending_library_name
             except AttributeError as e:
                 raise ValueError(f"unable to parse {line}") from e
         else:
             raise ValueError(f"unable to parse {line}")
+
+
+def change_mac_lib_depend_shared_lib_name(
+    library: str,
+    original_depending_library: str,
+    new_depending_library_name: str,
+    install_name_tool_exec: str
+) -> None:
+    command = [
+        install_name_tool_exec,
+        "-change",
+        original_depending_library,
+        os.path.join("@loader_path", new_depending_library_name),
+        str(library),
+    ]
+    subprocess.check_call(command, shell=False)  # nosec B603
+
+
+def deploy_darwin_shared_lib(
+    source: str,
+    destination: str,
+    fixup_strategy: Callable[[str], None]
+) -> None:
+    shutil.copy2(source, destination)
+    fixup_strategy(destination)
+
+
+def fix_up_darwin_libraries(
+    library: str,
+    search_paths: List[str],
+    get_dependencies_strat: Callable[[str], Iterable[Tuple[str, str]]],
+    change_depend_shared_lib_name_strat: Callable[[str, str, str, str], None],
+    deploy_library_strat: Callable[[str, str, Callable[[str], None]], None],
+    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
+) -> None:
+
+    for original_path, depending_library_name in get_dependencies_strat(
+        library
+    ):
         if exclude_libraries:
             if depending_library_name.lower() in {
                 lib.lower() for lib in exclude_libraries
             }:
                 continue
         output_path = os.path.dirname(library)
-        if not os.path.exists(
-            os.path.join(output_path, depending_library_name)
-        ):
+        fixup_strategy = functools.partial(
+            fix_up_darwin_libraries,
+            search_paths=search_paths,
+            get_dependencies_strat=get_dependencies_strat,
+            deploy_library_strat=deploy_library_strat,
+            change_depend_shared_lib_name_strat=(
+                change_depend_shared_lib_name_strat
+            ),
+            exclude_libraries=exclude_libraries
+        )
+        output_library = os.path.join(output_path, depending_library_name)
+        if not os.path.exists(output_library):
             for path in search_paths:
                 matching_library = os.path.join(path, depending_library_name)
                 print(f"searching in {path}")
                 if not os.path.exists(matching_library):
                     continue
-                shutil.copy2(matching_library, output_path)
-                fix_up_darwin_libraries(
-                    os.path.join(output_path, depending_library_name),
-                    search_paths,
-                    exclude_libraries,
+                deploy_library_strat(
+                    matching_library,
+                    output_library,
+                    fixup_strategy
                 )
                 break
             else:
@@ -410,15 +483,11 @@ def fix_up_darwin_libraries(
                     "unable to find matching library: "
                     f"{depending_library_name}"
                 )
-
-        command = [
-            install_name_tool,
-            "-change",
+        change_depend_shared_lib_name_strat(
+            library,
             os.path.join(original_path, depending_library_name),
-            os.path.join("@loader_path", depending_library_name),
-            str(library),
-        ]
-        subprocess.check_call(command, shell=False)  # nosec B603
+            depending_library_name
+        )
 
 
 def fix_up_windows_libraries(
@@ -429,7 +498,7 @@ def fix_up_windows_libraries(
         [str], List[str]
     ] = use_dumpbin_to_determine_deps,
 ) -> None:
-    depending_libraries = remove_system_dlls(
+    depending_libraries = remove_windows_system_libs(
         determine_dependencies_strategy(library)
     )
     output_path = os.path.dirname(library)
@@ -464,7 +533,25 @@ DEFAULT_FIXUP_LIBRARY_STRATEGIES: Dict[
     str, Callable[[str, List[str], Optional[Union[Set[str], List[str]]]], None]
 ] = {
     "Windows": fix_up_windows_libraries,
-    "Darwin": fix_up_darwin_libraries,
+    "Darwin": lambda lib, paths, exclusions: fix_up_darwin_libraries(
+        library=lib,
+        search_paths=paths,
+        get_dependencies_strat=functools.partial(
+            iter_otool_lib_dependencies,
+            otool_get_shared_libs_strategy=functools.partial(
+                otool_subprocess, otool_exec=shutil.which("otool")
+            )
+        ),
+        change_depend_shared_lib_name_strat=functools.partial(
+            change_mac_lib_depend_shared_lib_name,
+            install_name_tool_exec=shutil.which("install_name_tool")
+        ),
+        exclude_libraries=exclusions,
+        deploy_library_strat=functools.partial(
+            deploy_darwin_shared_lib
+        )
+
+    ),
     "Linux": fix_up_linux_libraries,
 }
 

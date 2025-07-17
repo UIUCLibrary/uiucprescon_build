@@ -65,7 +65,7 @@ def get_visual_studio_version() -> str:
                 # Can't find the registry key, it's okay, it might not exist.
                 continue
             raise e
-    sorted_values = sorted(installed_versions, key=lambda value: float(value))
+    sorted_values = sorted(installed_versions, key=lambda value: float(value)) # noqa
     try:
         return sorted_values[-1].split(".")[0]
     except IndexError:
@@ -109,7 +109,7 @@ def get_clang_version() -> str:
 
     env = None
     if sys.platform == "darwin":
-        global _cfg_target, _cfg_target_split
+        global _cfg_target, _cfg_target_split  # noqa
         if _cfg_target is None:
             from distutils import sysconfig
 

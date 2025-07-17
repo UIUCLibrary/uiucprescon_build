@@ -4,7 +4,7 @@ alabaster==0.7.16 ; python_full_version < '3.10'
     # via sphinx
 alabaster==1.0.0 ; python_full_version >= '3.10'
     # via sphinx
-astroid==3.3.10
+astroid==3.3.11
     # via pylint
 babel==2.17.0
     # via sphinx
@@ -12,7 +12,7 @@ bandit==1.8.6
     # via -r requirements/requirements-dev.in
 cachetools==6.1.0
     # via tox
-certifi==2025.6.15
+certifi==2025.7.14
     # via requests
 chardet==5.2.0
     # via tox
@@ -78,7 +78,7 @@ mccabe==0.7.0
     #   pylint
 mdurl==0.1.2
     # via markdown-it-py
-mypy==1.16.1
+mypy==1.17.0
     # via -r requirements/requirements-dev.in
 mypy-extensions==1.1.0
     # via mypy
@@ -141,6 +141,8 @@ rich==14.0.0
     # via bandit
 roman-numerals-py==3.1.0 ; python_full_version >= '3.11'
     # via sphinx
+ruff==0.12.3
+    # via -r requirements/requirements-dev.in
 setuptools==80.9.0
     # via
     #   uiucprescon-build (pyproject.toml)
