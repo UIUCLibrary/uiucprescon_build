@@ -192,7 +192,7 @@ def test_change_mac_lib_shared_library_name(monkeypatch):
         "/usr/bin/install_name_tool",
         "-change",
         "/usr/local/opt/spam/libspam.5.5.dylib",
-        "@loader_path/eggs.dylib",
+        os.path.join("@loader_path", "eggs.dylib"),
         "build/myproject/libspamuser.so"
     ]
 
