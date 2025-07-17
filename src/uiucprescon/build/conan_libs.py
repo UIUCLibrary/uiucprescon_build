@@ -622,6 +622,10 @@ def build_deps_with_conan(
 
 
 def fixup_library(shared_library: str) -> None:
+    warnings.warn(
+        "use uiucprescon.build.deps.fixup_library instead",
+        DeprecationWarning
+    )
     if sys.platform == "darwin":
         otool = shutil.which("otool")
         install_name_tool = shutil.which("install_name_tool")
@@ -668,6 +672,7 @@ def fixup_library(shared_library: str) -> None:
 
 
 def add_conan_imports(import_manifest_file: str, path: str, dest: str) -> None:
+    warnings.warn("Don't use", DeprecationWarning)
     libs: List[str] = []
     with open(import_manifest_file, "r", encoding="utf8") as f:
         for line in f.readlines():

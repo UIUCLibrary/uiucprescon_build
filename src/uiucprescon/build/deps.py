@@ -284,25 +284,40 @@ def use_readelf_to_determine_deps(
     return deps
 
 
+def run_patchelf_needed(
+    library: str,
+    patchelf_exec: str,
+    command_executor: Callable[[List[str]], str]
+) -> str:
+    return command_executor([patchelf_exec, "--print-needed", library])
+
+
+def is_linux_system_libraries(library: str) -> bool:
+    system_libs = [
+        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    ]
+    if any(library.startswith(system_lib) for system_lib in system_libs):
+        return True
+    return False
+
+
 def use_patchelf_to_determine_deps(library: str, patchelf) -> List[str]:
     if patchelf is None:
         patchelf = shutil.which("patchelf")
     if patchelf is None:
         raise FileNotFoundError("patchelf not found")
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+    return [
+        dep for dep in run_patchelf_needed(
+            library,
+            patchelf,
+            lambda args: subprocess.run(
+                args,
+                check=True,
+                text=True,
+                capture_output=True
+            ).stdout
+        ).split() if not is_linux_system_libraries(library)
     ]
-    deps = []
-    for dep in subprocess.run(  # nosec B603
-            [patchelf, "--print-needed", library],
-            check=True,
-            text=True,
-            capture_output=True
-    ).stdout.split():
-        if any(dep.startswith(lib) for lib in system_libs):
-            continue
-        deps.append(dep)
-    return deps
 
 
 def fix_up_linux_libraries(

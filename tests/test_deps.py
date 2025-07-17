@@ -163,3 +163,18 @@ def test_iter_otool_lib_dependencies_get_bad_parse():
             otool_get_shared_libs_strategy=lambda *_: "bad unparsible output"
         ))
     assert "unable to parse" in str(e)
+
+def test_run_patchelf_needed(monkeypatch):
+    run = Mock()
+    deps.run_patchelf_needed("libspam", "patchelf", run)
+    run.assert_called_with(["patchelf", "--print-needed", "libspam"])
+
+@pytest.mark.parametrize(
+    "library, expected",
+    [
+        ("libspam", False),
+        ("libm", True),
+    ]
+)
+def test_is_linux_system_libraries(library, expected):
+    assert deps.is_linux_system_libraries(library) == expected
