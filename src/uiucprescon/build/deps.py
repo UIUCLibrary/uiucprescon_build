@@ -10,14 +10,13 @@ import sys
 import sysconfig
 import shutil
 from typing import (
-    List, Callable, Optional, Union, Set, Dict, cast, TYPE_CHECKING
+    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple
 )
 import warnings
 
 from setuptools.msvc import EnvironmentInfo
 
 from .msvc import msvc14_get_vc_env
-
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
 
@@ -386,7 +385,7 @@ def otool_subprocess(library: str, otool_exec: str) -> str:
 def iter_otool_lib_dependencies(
     library: str,
     otool_get_shared_libs_strategy: Callable[[str], str],
-):
+) -> Iterable[Tuple[str, str]]:
     regex = r"^(?P<path>([@a-zA-Z./0-9-_+])+)"\
             r"/"\
             r"(?P<file>lib[a-zA-Z/.0-9+-]+\.dylib)"
@@ -413,7 +412,7 @@ def iter_otool_lib_dependencies(
             raise ValueError(f"unable to parse {line}")
 
 
-def change_mac_lib_dependency_shared_library_name(
+def change_mac_lib_depend_shared_lib_name(
     library: str,
     original_depending_library: str,
     new_depending_library_name: str,
@@ -429,29 +428,26 @@ def change_mac_lib_dependency_shared_library_name(
     subprocess.check_call(command, shell=False)  # nosec B603
 
 
+def deploy_darwin_shared_lib(
+    source: str,
+    destination: str,
+    fixup_strategy: Callable[[str], None]
+) -> None:
+    shutil.copy2(source, destination)
+    fixup_strategy(destination)
+
+
 def fix_up_darwin_libraries(
     library: str,
     search_paths: List[str],
+    get_dependencies_strat: Callable[[str], Iterable[Tuple[str, str]]],
+    change_depend_shared_lib_name_strat: Callable[[str, str, str, str], None],
+    deploy_library_strat: Callable[[str, str, Callable[[str], None]], None],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-    install_name_tool=shutil.which("install_name_tool"),
-    otool=shutil.which("otool"),
 ) -> None:
-    if not all([otool, install_name_tool]):
-        raise FileNotFoundError(
-            "Unable to fixed up because required tools are missing. "
-            "Make sure that otool and install_name_tool are on "
-            "the PATH."
-        )
 
-    # Hack: Casting the following to strings to help MyPy which doesn't
-    #  currently (as of mypy version 1.6.0) understand that if they any
-    #  were None, they'd raise a FileNotFound error.
-    otool = cast(str, otool)
-    install_name_tool = cast(str, install_name_tool)
-
-    for original_path, depending_library_name in iter_otool_lib_dependencies(
-        library,
-        functools.partial(otool_subprocess, otool_exec=otool)
+    for original_path, depending_library_name in get_dependencies_strat(
+        library
     ):
         if exclude_libraries:
             if depending_library_name.lower() in {
@@ -459,19 +455,27 @@ def fix_up_darwin_libraries(
             }:
                 continue
         output_path = os.path.dirname(library)
-        if not os.path.exists(
-            os.path.join(output_path, depending_library_name)
-        ):
+        fixup_strategy = functools.partial(
+            fix_up_darwin_libraries,
+            search_paths=search_paths,
+            get_dependencies_strat=get_dependencies_strat,
+            deploy_library_strat=deploy_library_strat,
+            change_depend_shared_lib_name_strat=(
+                change_depend_shared_lib_name_strat
+            ),
+            exclude_libraries=exclude_libraries
+        )
+        output_library = os.path.join(output_path, depending_library_name)
+        if not os.path.exists(output_library):
             for path in search_paths:
                 matching_library = os.path.join(path, depending_library_name)
                 print(f"searching in {path}")
                 if not os.path.exists(matching_library):
                     continue
-                shutil.copy2(matching_library, output_path)
-                fix_up_darwin_libraries(
-                    os.path.join(output_path, depending_library_name),
-                    search_paths,
-                    exclude_libraries,
+                deploy_library_strat(
+                    matching_library,
+                    output_library,
+                    fixup_strategy
                 )
                 break
             else:
@@ -479,11 +483,10 @@ def fix_up_darwin_libraries(
                     "unable to find matching library: "
                     f"{depending_library_name}"
                 )
-        change_mac_lib_dependency_shared_library_name(
+        change_depend_shared_lib_name_strat(
             library,
             os.path.join(original_path, depending_library_name),
-            depending_library_name,
-            install_name_tool
+            depending_library_name
         )
 
 
@@ -530,7 +533,25 @@ DEFAULT_FIXUP_LIBRARY_STRATEGIES: Dict[
     str, Callable[[str, List[str], Optional[Union[Set[str], List[str]]]], None]
 ] = {
     "Windows": fix_up_windows_libraries,
-    "Darwin": fix_up_darwin_libraries,
+    "Darwin": lambda lib, paths, exclusions: fix_up_darwin_libraries(
+        library=lib,
+        search_paths=paths,
+        get_dependencies_strat=functools.partial(
+            iter_otool_lib_dependencies,
+            otool_get_shared_libs_strategy=functools.partial(
+                otool_subprocess, otool_exec=shutil.which("otool")
+            )
+        ),
+        change_depend_shared_lib_name_strat=functools.partial(
+            change_mac_lib_depend_shared_lib_name,
+            install_name_tool_exec=shutil.which("install_name_tool")
+        ),
+        exclude_libraries=exclusions,
+        deploy_library_strat=functools.partial(
+            deploy_darwin_shared_lib
+        )
+
+    ),
     "Linux": fix_up_linux_libraries,
 }
 

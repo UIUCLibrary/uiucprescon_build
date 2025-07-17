@@ -1,4 +1,6 @@
-from unittest.mock import Mock
+# ruff: noqa: E501
+import os.path
+from unittest.mock import Mock, ANY
 
 import pytest
 
@@ -71,19 +73,46 @@ Tag        Type                         Name/Value
         "foo.so", run_readelf_strategy=dummy_readelf
     ) == ["bar.so"]
 
-# def test_fix_up_darwin_libraries():
-#     deps.fix_up_darwin_libraries(
-#         "openjp2",
-#         search_paths=[],
-#         install_name_tool="dummy_install_name_tool",
-#         otool="dummy_otool"
-#     )
+
+def test_fix_up_darwin_libraries_empty():
+    deploy_library_strat = Mock()
+    change_depend_shared_lib_name_strat = Mock()
+    get_dependencies_strat = Mock(return_value=[])
+    deps.fix_up_darwin_libraries(
+        "openjp2",
+        search_paths=[],
+        get_dependencies_strat=get_dependencies_strat,
+        change_depend_shared_lib_name_strat=change_depend_shared_lib_name_strat,
+        deploy_library_strat=deploy_library_strat
+    )
+    deploy_library_strat.assert_not_called()
+
+
+def test_fix_up_darwin_libraries(monkeypatch):
+    deploy_library_strat = Mock()
+    change_depend_shared_lib_name_strat = Mock()
+    get_dependencies_strat = Mock(return_value=[("/some/path", "zstd")])
+    monkeypatch.setattr(deps.os.path, "exists", lambda p: "fake_path" in p)
+    deps.fix_up_darwin_libraries(
+        "openjp2",
+        search_paths=["fake_path"],
+        get_dependencies_strat=get_dependencies_strat,
+        change_depend_shared_lib_name_strat=change_depend_shared_lib_name_strat,
+        deploy_library_strat=deploy_library_strat
+    )
+    deploy_library_strat.assert_called_once_with(
+        os.path.join("fake_path", "zstd"), "zstd", ANY
+
+    )
+
 
 def test_otool_subprocess(monkeypatch):
     run = Mock()
     monkeypatch.setattr(deps.subprocess, "run", run)
     deps.otool_subprocess("openjp2", "otool_exec")
-    assert run.call_args[0][0] == ["otool_exec","-L", 'openjp2']
+    assert run.call_args[0][0] == ["otool_exec", "-L", "openjp2"]
+
+
 @pytest.mark.parametrize(
     "library_name, otool_output, expected_list",
     [
@@ -96,7 +125,7 @@ def test_otool_subprocess(monkeypatch):
 @rpath/libleptonica.6.dylib (compatibility version 6.0.0, current version 6.0.0)
 /usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1900.180.0)
 """.lstrip(),
-            [('@rpath', 'libtesseract.5.5.dylib'), ('@rpath', 'libleptonica.6.dylib')]
+            [("@rpath", "libtesseract.5.5.dylib"), ("@rpath", "libleptonica.6.dylib")]
         ),
         (
             "/usr/local/opt/imagemagick/lib/libMagick++-7.Q16HDRI.5.dylib",
@@ -119,8 +148,14 @@ def test_otool_subprocess(monkeypatch):
 /usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1700.255.5)
 """.lstrip(),
             [
-                ("/usr/local/Cellar/imagemagick/7.1.2-0/lib", "libMagickCore-7.Q16HDRI.10.dylib"),
-                ("/usr/local/Cellar/imagemagick/7.1.2-0/lib", "libMagickWand-7.Q16HDRI.10.dylib"),
+                (
+                    "/usr/local/Cellar/imagemagick/7.1.2-0/lib",
+                    "libMagickCore-7.Q16HDRI.10.dylib"
+                ),
+                (
+                    "/usr/local/Cellar/imagemagick/7.1.2-0/lib",
+                    "libMagickWand-7.Q16HDRI.10.dylib"
+                ),
                 ("/usr/local/opt/little-cms2/lib", "liblcms2.2.dylib"),
                 ("/usr/local/opt/liblqr/lib", "liblqr-1.0.dylib"),
                 ("/usr/local/opt/glib/lib", "libglib-2.0.0.dylib"),
@@ -133,16 +168,21 @@ def test_otool_subprocess(monkeypatch):
         )
     ]
 )
-def test_iter_otool_lib_dependencies(library_name, otool_output, expected_list):
+def test_iter_otool_lib_dependencies(
+    library_name,
+    otool_output,
+    expected_list
+):
     assert list(deps.iter_otool_lib_dependencies(
         library_name,
         otool_get_shared_libs_strategy=lambda *_: otool_output
     )) == expected_list
 
+
 def test_change_mac_lib_shared_library_name(monkeypatch):
     check_call = Mock()
     monkeypatch.setattr(deps.subprocess, "check_call", check_call)
-    deps.change_mac_lib_dependency_shared_library_name(
+    deps.change_mac_lib_depend_shared_lib_name(
         "build/myproject/libspamuser.so",
         "/usr/local/opt/spam/libspam.5.5.dylib",
         "eggs.dylib",
@@ -156,6 +196,7 @@ def test_change_mac_lib_shared_library_name(monkeypatch):
         "build/myproject/libspamuser.so"
     ]
 
+
 def test_iter_otool_lib_dependencies_get_bad_parse():
     with pytest.raises(ValueError) as e:
         list(deps.iter_otool_lib_dependencies(
@@ -164,10 +205,12 @@ def test_iter_otool_lib_dependencies_get_bad_parse():
         ))
     assert "unable to parse" in str(e)
 
+
 def test_run_patchelf_needed(monkeypatch):
     run = Mock()
     deps.run_patchelf_needed("libspam", "patchelf", run)
     run.assert_called_with(["patchelf", "--print-needed", "libspam"])
+
 
 @pytest.mark.parametrize(
     "library, expected",
