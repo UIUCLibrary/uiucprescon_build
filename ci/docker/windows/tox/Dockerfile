@@ -8,6 +8,15 @@ ARG PIP_INDEX_URL
 
 ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
 
+ARG CONAN_USER_HOME=C:/Users/ContainerAdministrator
+# Path where conan data will be stored
+
+ARG CONAN_HOME=${CONAN_USER_HOME}/.conan2
+
+ARG CONAN_CENTER_PROXY_V2_URL=https://center2.conan.io
+# If you want to use a diffrent remote for Conan, such as a proxy. Set the CONAN_CENTER_PROXY_V2_URL
+# Not this is only for building the image. The actual conan center proxy URL is set in the remotes.json file.
+
 FROM ${FROM_IMAGE} AS certsgen
 RUN certutil -generateSSTFromWU roots.sst
 
@@ -53,6 +62,46 @@ RUN C:\ProgramData\chocolatey\bin\choco.exe sources ; `
     $env:Path = [System.Environment]::GetEnvironmentVariable(\"Path\",\"Machine\") + \";\" + [System.Environment]::GetEnvironmentVariable(\"Path\",\"User\") ; `
     c:/verifyenv.ps1
 
+FROM BASE_BUILDER AS CONAN_BUILDER
+ARG UV_EXTRA_INDEX_URL
+ARG UV_INDEX_URL
+ARG PIP_EXTRA_INDEX_URL
+ARG PIP_INDEX_URL
+ARG CONAN_HOME
+COPY requirements-dev.txt c:/requirements/requirements-dev.txt
+COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
+COPY ci/docker/windows/tox/conan/profile.ini ${CONAN_HOME}/profiles/default
+COPY tests/conan_test_libraries.json c:/tests/conan_test_libraries.json
+ENV UV_CONSTRAINT=c:/requirements/requirements-dev.txt
+ARG CONAN_CENTER_PROXY_V2_URL
+RUN $json = Get-Content 'c:/tests/conan_test_libraries.json' | ConvertFrom-Json ;`
+    $requires = ($json.conan_test_libraries.'2'.zstd.requires | ForEach-Object { """--requires=$_"""}) -join ' '; `
+    $options = ($json.conan_test_libraries.'2'.zstd.default_options.PSObject.Properties | ForEach-Object { """-o=$($_.Name)=$($_.Value)""" }) -join ' ';`
+    uvx --with cmake --with ninja conan profile detect --exist-ok ; `
+    $conanCenterUrl = (((Get-Content -Raw -Path ${Env:CONAN_HOME}\remotes.json) | ConvertFrom-Json).remotes[0].url);`
+    if (${env:CONAN_CENTER_PROXY_V2_URL} -ne ${conanCenterUrl}) { `
+      Write-Host "Using a proxy for conan center: $Env:CONAN_CENTER_PROXY_V2_URL" ; `
+      Copy-Item -Path "${Env:CONAN_HOME}\remotes.json" -Destination "c:\remotes.json" ; `
+      uvx --with cmake --with ninja conan remote update conan-center --url ${env:CONAN_CENTER_PROXY_V2_URL}; `
+    }; `
+    uvx --with cmake --with ninja conan install $requires  --build=missing $options; `
+    if ($LASTEXITCODE -ne 0) { `
+      throw \"Command 'conan install' failed with exit code: $LASTEXITCODE\"`
+    } ;`
+    uvx --with cmake --with ninja conan cache clean "*" -b --source --build --temp ; `
+    uv cache clean --no-progress ; `
+    if (${env:CONAN_CENTER_PROXY_V2_URL} -ne ${conanCenterUrl}) { `
+      Move-Item -Path "c:\remotes.json" -Destination "${Env:CONAN_HOME}\remotes.json" -Force ;`
+    }
+# ==============================================================================
+FROM BASE_BUILDER
+
 COPY --from=certsgen c:/roots.sst roots.sst
 RUN certutil -addstore -f root roots.sst ; `
     del roots.sst
+
+ARG CONAN_USER_HOME
+ARG CONAN_HOME
+COPY --from=CONAN_BUILDER ${CONAN_HOME}/ ${CONAN_HOME}/
+ENV CONAN_USER_HOME=${CONAN_USER_HOME}`
+    CONAN_HOME=${CONAN_HOME}

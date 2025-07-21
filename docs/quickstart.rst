@@ -28,9 +28,7 @@ ____________
     class TesseractBindConan(ConanFile):
         requires = ["tesseract/4.1.1",]
         settings = "os", "arch", "compiler", "build_type"
-
-        generators = ["json", "cmake_paths"]
-        default_options = {}
+        generators = ["CMakeToolchain", "CMakeDeps"]
 
 
 setup.py
@@ -38,17 +36,7 @@ ________
 
 .. code-block:: python
 
-    try:
-        from pybind11.setup_helpers import Pybind11Extension
-    except ImportError:
-        from setuptools import Extension as Pybind11Extension
-
-    cmd_class = {}
-    try:
-        from uiucprescon.build import conan_libs
-        cmd_class["build_conan"] = conan_libs.BuildConan
-    except ImportError:
-        pass
+    from pybind11.setup_helpers import Pybind11Extension
 
     tesseract_extension = Pybind11Extension(
         "spam.tesseractwrapper",
@@ -62,5 +50,4 @@ ________
     setup(
         packages=["spam"],
         ext_modules=[tesseract_extension],
-        cmdclass=cmd_class
     )
