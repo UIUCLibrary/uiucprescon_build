@@ -348,12 +348,6 @@ def build_deps_with_conan(
             verbose,
             debug,
         )
-    if install_libs:
-        import_manifest = os.path.join(build_dir, "conan_imports_manifest.txt")
-        if os.path.exists(import_manifest):
-            copy_conan_imports_from_manifest(
-                import_manifest, path=build_dir, dest=install_dir
-            )
     with open(build_json, "r", encoding="utf-8") as f:
         build_info = read_conan_build_info_json(f)
 
