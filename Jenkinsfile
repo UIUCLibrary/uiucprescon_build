@@ -385,6 +385,7 @@ pipeline {
                                                                                         [pattern: 'venv/', type: 'INCLUDE'],
                                                                                     ]
                                                                                 )
+                                                                                throw e
                                                                             }
                                                                         }
                                                                     }
@@ -463,10 +464,8 @@ pipeline {
                                                                         retry(3){
                                                                             try{
                                                                                 powershell(label: 'Running Tox',
-                                                                                    script: """python -m venv venv --clear
-                                                                                               venv\\Scripts\\pip --disable-pip-version-check install uv
-                                                                                               venv\\Scripts\\uv python install cpython-${version}
-                                                                                               venv\\Scripts\\uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
+                                                                                    script: """uv python install cpython-${version}
+                                                                                               uvx -p ${version} --constraint requirements-dev.txt --with tox-uv tox run -e ${toxEnv} -vv
                                                                                         """
                                                                                 )
                                                                             } catch(e) {
@@ -478,6 +477,7 @@ pipeline {
                                                                                         [pattern: 'venv/', type: 'INCLUDE'],
                                                                                     ]
                                                                                 )
+                                                                                throw e
                                                                             }
                                                                         }
                                                                     }
@@ -546,6 +546,7 @@ pipeline {
                                                                                 [pattern: 'venv/', type: 'INCLUDE'],
                                                                             ]
                                                                         )
+                                                                        throw e
                                                                     }
                                                                 }
                                                             } finally{

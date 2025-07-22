@@ -1,10 +1,10 @@
-import contextlib
 import os
 
 import setuptools
 import setuptools.build_meta
 import platform
 from . introspection import get_extension_build_info
+from . import utils
 from . import conan_libs
 from . import monkey
 from pathlib import Path
@@ -19,17 +19,6 @@ def build_sdist(
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> str:
     return setuptools.build_meta.build_sdist(sdist_directory, config_settings)
-
-
-@contextlib.contextmanager
-def set_env_var(env_vars: Dict[str, str]):
-    """Set an environment variable."""
-    og = os.environ.copy()
-    try:
-        os.environ.update(env_vars)
-        yield
-    finally:
-        os.environ = og
 
 
 def build_wheel(
@@ -93,7 +82,7 @@ def build_wheel(
             if platform.system() == "Darwin":
                 env_vars["MACOSX_DEPLOYMENT_TARGET"] =\
                     config_settings["target_os_version"]
-    with set_env_var(env_vars):
+    with utils.set_env_var(env_vars):
         return setuptools.build_meta.build_wheel(
             wheel_directory, config_settings, metadata_directory
         )

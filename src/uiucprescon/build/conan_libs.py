@@ -423,14 +423,15 @@ class BuildConan(setuptools.Command):
                 build_py = cast(
                     BuildPy, self.get_finalized_command("build_py")
                 )
-                # FIXME: This breaks if the source folder from the package is
-                #  located in a src directory
-                install_dir = os.path.abspath(
-                    os.path.join(
-                        build_py.build_lib,
-                        build_py.get_package_dir(build_py.packages[0]),
+                if len(build_py.packages) == 0:
+                    install_dir = build_py.build_lib
+                else:
+                    install_dir = os.path.abspath(
+                        os.path.join(
+                            build_py.build_lib,
+                            build_py.get_package_dir(build_py.packages[0]),
+                        )
                     )
-                )
         else:
             install_dir = build_ext.build_temp
 
