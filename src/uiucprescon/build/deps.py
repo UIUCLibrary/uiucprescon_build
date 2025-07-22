@@ -490,43 +490,62 @@ def fix_up_darwin_libraries(
         )
 
 
-def fix_up_windows_libraries(
-    library: str,
-    search_paths: List[str],
-    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-    determine_dependencies_strategy: Callable[
-        [str], List[str]
-    ] = use_dumpbin_to_determine_deps,
-) -> None:
-    depending_libraries = remove_windows_system_libs(
-        determine_dependencies_strategy(library)
-    )
-    output_path = os.path.dirname(library)
-    for depending_library in depending_libraries:
-        if exclude_libraries:
+class FixUpWindowsLibraries:
+
+    def __init__(self, search_paths: List[str], exclude_libraries=None):
+        super().__init__()
+        self.exclude_libraries = exclude_libraries or []
+        self.search_paths = search_paths
+        self._dependency_search = use_dumpbin_to_determine_deps
+
+    def get_dependencies(self, library: str) -> List[str]:
+        return remove_windows_system_libs(
+            self._dependency_search(library)
+        )
+
+    def find_shared_library(self, library: str) -> Optional[str]:
+        for path in self.search_paths:
+            matching_dll = os.path.join(
+                path, os.path.basename(library)
+            )
+            if os.path.exists(matching_dll):
+                return matching_dll
+
+    def fix_up(self, library: str) -> None:
+        depending_libraries = self.get_dependencies(library)
+
+        for depending_library in depending_libraries:
             if depending_library.lower() in {
-                lib.lower() for lib in exclude_libraries
+                lib.lower() for lib in self.exclude_libraries
             }:
                 continue
-        if not os.path.exists(os.path.join(output_path, depending_library)):
-            for path in search_paths:
-                matching_dll = os.path.join(
-                    path, os.path.basename(depending_library)
-                )
-                if os.path.exists(matching_dll):
-                    output_library = os.path.join(
-                        output_path, depending_library
-                    )
-                    print(f"Copying {matching_dll} to {output_library}")
-                    shutil.copy2(matching_dll, output_library)
-                    fixup_library(
-                        output_library, search_paths, exclude_libraries
-                    )
-                    break
+            output_path = os.path.dirname(library)
+            output_library = os.path.join(output_path, depending_library)
+            if os.path.exists(output_library):
+                continue
+
+            if matching_dll := self.find_shared_library(
+                os.path.basename(depending_library)
+            ):
+                print(f"Copying {matching_dll} to {output_library}")
+                shutil.copy2(matching_dll, output_library)
+                self.fix_up(output_library)
             else:
                 raise FileNotFoundError(
                     f"Unable to locate {depending_library}"
                 )
+
+
+def fix_up_windows_libraries(
+    library: str,
+    search_paths: List[str],
+    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
+) -> None:
+    fixer = FixUpWindowsLibraries(
+        search_paths,
+        exclude_libraries=exclude_libraries
+    )
+    return fixer.fix_up(library)
 
 
 DEFAULT_FIXUP_LIBRARY_STRATEGIES: Dict[

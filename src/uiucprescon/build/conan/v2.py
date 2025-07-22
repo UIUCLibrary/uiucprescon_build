@@ -23,7 +23,6 @@ import yaml
 
 from uiucprescon.build.compiler_info import get_compiler_version
 from uiucprescon.build.conan.files import read_conan_build_info_json
-from .utils import copy_conan_imports_from_manifest
 
 from conan.api.conan_api import ConanAPI
 from conan.cli.cli import Cli
