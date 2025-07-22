@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess  # nosec B404
 import sys
+import warnings
 from importlib.metadata import version
 from pathlib import Path
 from typing import Tuple, cast, List, Optional
@@ -15,11 +16,16 @@ class LanguageStandardsVersion:
     c_std: Optional[str] = None
 
 
-def get_conan_version() -> Tuple[str, str]:
+def get_conan_version() -> Tuple[str, str]:  # pragma: no cover
+    warnings.warn("use `version('conan')` instead", DeprecationWarning)
     return tuple(b for b in version("conan").split("."))
 
 
-def fixup_library(shared_library: str) -> None:
+def fixup_library(shared_library: str) -> None:  # pragma: no cover
+    warnings.warn(
+        "use `uiucprescon.build.deps.fixup_library` instead",
+        DeprecationWarning
+    )  # pragma: no cover
     if sys.platform == "darwin":
         otool = shutil.which("otool")
         install_name_tool = shutil.which("install_name_tool")
