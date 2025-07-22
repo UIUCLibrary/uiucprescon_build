@@ -1,8 +1,9 @@
 import json
 import os
+import sys
+from platform import python_version
 
 import pytest
-
 from uiucprescon import build
 from importlib_metadata import version
 
@@ -71,7 +72,14 @@ def zstd_example_config():
     with open(config_json, "r", encoding="utf-8") as f:
         return json.load(f)['conan_test_libraries']["2"]["zstd"]
 
-@pytest.mark.skipif(version("conan") < "2.0.0", reason="Requires Conan 2.0 or higher")
+@pytest.mark.skipif(
+    sys.version_info < (3, 10) and sys.platform == "win32",
+    reason="There is an issue with module_from_spec on windows and Python 3.9"
+)
+@pytest.mark.skipif(
+    version("conan") < "2.0.0",
+    reason="Requires Conan 2.0 or higher"
+)
 def test_conan_integration_with_shared_library(tmp_path, monkeypatch, zstd_example_config):
     source_root = tmp_path / "package"
     source_root.mkdir()
@@ -89,7 +97,6 @@ class BuildPybind11Extensions(BuildPybind11Extension):
     def run(self):
         conan_cmd = self.get_finalized_command("build_conan")
         conan_cmd.run()
-        # breakpoint()
         super().run()
         module_path = os.path.join(self.build_lib, 'dummy', self.get_ext_filename("spam"))
         module_name = 'dummy.spam' # The name you want to assign to the imported module
