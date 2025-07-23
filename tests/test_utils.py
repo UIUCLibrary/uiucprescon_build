@@ -20,6 +20,7 @@ def test_set_env_var():
     # Check that the test variable is no longer present
     assert "TEST_VAR" not in os.environ
 
+
 @pytest.mark.skipif(
     sys.platform != "win32",
     reason="This test is specific to Windows case insensitivity"
@@ -39,6 +40,7 @@ def test_set_env_var_keep_in_sensitive_on_window():
 
     # Check that the test variable is no longer present
     assert "TEST_VAR" not in os.environ
+
 
 @pytest.mark.skipif(
     sys.platform != "win32",

@@ -6,6 +6,7 @@ import pytest
 from uiucprescon import build
 from importlib_metadata import version
 
+
 def test_conan_integration(tmp_path, monkeypatch):
     source_root = tmp_path / "package"
     source_root.mkdir()
@@ -65,6 +66,7 @@ class Dummy(ConanFile):
     build.build_wheel(str(output))
     assert any(f.startswith("dummy") for f in os.listdir(output))
 
+
 @pytest.fixture(scope="session")
 def zstd_example_config():
     config_json =\
@@ -72,6 +74,7 @@ def zstd_example_config():
 
     with open(config_json, "r", encoding="utf-8") as f:
         return json.load(f)["conan_test_libraries"]["2"]["zstd"]
+
 
 @pytest.mark.skipif(
     sys.version_info < (3, 10) and sys.platform == "win32",

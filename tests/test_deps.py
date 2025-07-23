@@ -308,6 +308,7 @@ class TestFixUpWindowsLibraries:
             "zstd.dll", os.path.join("spam_path", "zstd.dll")
         )
 
+
 def test_fix_up_windows_libraries():
     fixup_obj = Mock(spec_set=deps.FixUpWindowsLibraries)
     fixup_klass = Mock(return_value=fixup_obj)
