@@ -7,6 +7,14 @@ import abc
 import warnings
 from uiucprescon.build.utils import locate_file
 
+__all__ = [
+    "parse_conan_build_info",
+    "read_conan_build_info_json",
+    "get_library_metadata_from_build_info_json",
+    "get_linking_libraries_fp",
+    "ConanBuildInfo"
+]
+
 
 class ConanBuildInfoParser:
     def __init__(self, fp: io.TextIOWrapper) -> None:

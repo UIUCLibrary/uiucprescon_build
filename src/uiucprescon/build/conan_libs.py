@@ -30,7 +30,7 @@ from uiucprescon.build.compiler_info import (
 )
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import (
-    ConanBuildInfo, ConanBuildInfoParser,
+    ConanBuildInfo,
     read_conan_build_info_json,
     parse_conan_build_info,
     get_library_metadata_from_build_info_json,
@@ -40,8 +40,6 @@ from uiucprescon.build.conan.utils import LanguageStandardsVersion
 
 if TYPE_CHECKING:
     import distutils.ccompiler
-
-__all__ = ["ConanBuildInfoParser"]
 
 
 class AbsConanBuildInfo(abc.ABC):
