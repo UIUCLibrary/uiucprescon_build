@@ -255,6 +255,7 @@ def add_all_libs(
     This strategy adds all libraries from the extension to the extension's
     libraries list.
     """
+    warnings.warn("Don't use", DeprecationWarning)
     include_dirs = text_md["include_paths"]
     library_dirs = text_md["lib_paths"]
     define_macros = [(d, None) for d in text_md.get("definitions", [])]
@@ -397,7 +398,9 @@ class BuildConan(setuptools.Command):
                     return os.path.join(root, f)
         return None
 
-    def add_deps_to_compiler(self, metadata) -> None:
+    def add_deps_to_compiler(self, metadata) -> None:  # pragma: no cover
+        """Pending removal."""
+        warnings.warn("Don't use", DeprecationWarning)
         build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
         compiler_adder = CompilerInfoAdder(build_ext_cmd)
 
