@@ -109,7 +109,7 @@ To bump the version to a development version, you can run:
 
 .. code-block:: shell-session
 
-   (venv) devuser@mylaptop ~ % uvx --from commitizen cz bump --allow-no-commit --patch --devrelease 1
+   (venv) devuser@mylaptop ~ % cz bump --allow-no-commit --devrelease 17 --files-only
    (venv) devuser@mylaptop ~ % git commit -m "Next iteration"
 
 
