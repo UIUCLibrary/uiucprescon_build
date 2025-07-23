@@ -76,16 +76,21 @@ WINDOWS_SYSTEM_DLLS = {
 }
 
 
+def is_windows_system_lib(lib: str) -> bool:
+    if lib.startswith("api-ms-win-crt"):
+        return True
+
+    if lib.startswith("python"):
+        return True
+
+    if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+        return True
+
+
 def remove_windows_system_libs(libs: List[str]) -> List[str]:
     non_system_dlls = []
     for lib in libs:
-        if lib.startswith("api-ms-win-crt"):
-            continue
-
-        if lib.startswith("python"):
-            continue
-
-        if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+        if is_windows_system_lib(lib):
             continue
         non_system_dlls.append(lib)
     return non_system_dlls
@@ -496,12 +501,18 @@ class FixUpWindowsLibraries:
         super().__init__()
         self.exclude_libraries = exclude_libraries or []
         self.search_paths = search_paths
-        self._dependency_search = use_dumpbin_to_determine_deps
+        self.dependency_search_strategy = use_dumpbin_to_determine_deps
+        self.filter_system_libs = remove_windows_system_libs
+        self.library_exclusion_filters = [
+            lambda lib: not is_windows_system_lib(lib),
+            lambda lib: lib.lower() not in [
+                ex_lib.lower() for ex_lib in self.exclude_libraries
+            ]
+        ]
+        self.deploy = shutil.copy2
 
     def get_dependencies(self, library: str) -> List[str]:
-        return remove_windows_system_libs(
-            self._dependency_search(library)
-        )
+        return self.dependency_search_strategy(library)
 
     def find_shared_library(self, library: str) -> Optional[str]:
         for path in self.search_paths:
@@ -511,25 +522,32 @@ class FixUpWindowsLibraries:
             if os.path.exists(matching_dll):
                 return matching_dll
 
+    def deploy_and_fixup_library(
+        self,
+        source_library: str,
+        output_library: str
+    ) -> None:
+        self.deploy(source_library, output_library)
+        self.fix_up(output_library)
+
     def fix_up(self, library: str) -> None:
         depending_libraries = self.get_dependencies(library)
+        for f in self.library_exclusion_filters:
+            depending_libraries = filter(f, depending_libraries)
 
         for depending_library in depending_libraries:
-            if depending_library.lower() in {
-                lib.lower() for lib in self.exclude_libraries
-            }:
-                continue
-            output_path = os.path.dirname(library)
-            output_library = os.path.join(output_path, depending_library)
+            output_library =\
+                os.path.join(os.path.dirname(library), depending_library)
+
             if os.path.exists(output_library):
+                # No need to copy it again if already added from another dep
                 continue
 
             if matching_dll := self.find_shared_library(
                 os.path.basename(depending_library)
             ):
                 print(f"Copying {matching_dll} to {output_library}")
-                shutil.copy2(matching_dll, output_library)
-                self.fix_up(output_library)
+                self.deploy_and_fixup_library(matching_dll, output_library)
             else:
                 raise FileNotFoundError(
                     f"Unable to locate {depending_library}"
@@ -540,11 +558,9 @@ def fix_up_windows_libraries(
     library: str,
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
+    fixup_klass = FixUpWindowsLibraries,
 ) -> None:
-    fixer = FixUpWindowsLibraries(
-        search_paths,
-        exclude_libraries=exclude_libraries
-    )
+    fixer = fixup_klass(search_paths, exclude_libraries=exclude_libraries)
     return fixer.fix_up(library)
 
 

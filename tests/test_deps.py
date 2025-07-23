@@ -11,20 +11,20 @@ from uiucprescon.build import deps
     "given, expected",
     [
         (
-            ["openjpg.dll", "KERNEL32.dll"],
-            ["openjpg.dll"]
+                ["openjpg.dll", "KERNEL32.dll"],
+                ["openjpg.dll"]
         ),
         (
-            ["openjpg.dll", "kernel32.dll"],
-            ["openjpg.dll"]
+                ["openjpg.dll", "kernel32.dll"],
+                ["openjpg.dll"]
         ),
         (
-            ["openjpg.dll", "python.dll"],
-            ["openjpg.dll"]
+                ["openjpg.dll", "python.dll"],
+                ["openjpg.dll"]
         ),
         (
-            ["openjpg.dll", "api-ms-win-crt-runtime-l1-1-0.dll"],
-            ["openjpg.dll"]
+                ["openjpg.dll", "api-ms-win-crt-runtime-l1-1-0.dll"],
+                ["openjpg.dll"]
         ),
     ]
 )
@@ -69,6 +69,7 @@ Tag        Type                         Name/Value
 0x0000000000000000 (NULL)               0x0
 """.lstrip()
         return library
+
     assert deps.use_readelf_to_determine_deps(
         "foo.so", run_readelf_strategy=dummy_readelf
     ) == ["bar.so"]
@@ -82,7 +83,9 @@ def test_fix_up_darwin_libraries_empty():
         "openjp2",
         search_paths=[],
         get_dependencies_strat=get_dependencies_strat,
-        change_depend_shared_lib_name_strat=change_depend_shared_lib_name_strat,
+        change_depend_shared_lib_name_strat=(
+            change_depend_shared_lib_name_strat
+        ),
         deploy_library_strat=deploy_library_strat
     )
     deploy_library_strat.assert_not_called()
@@ -90,14 +93,15 @@ def test_fix_up_darwin_libraries_empty():
 
 def test_fix_up_darwin_libraries(monkeypatch):
     deploy_library_strat = Mock()
-    change_depend_shared_lib_name_strat = Mock()
     get_dependencies_strat = Mock(return_value=[("/some/path", "zstd")])
     monkeypatch.setattr(deps.os.path, "exists", lambda p: "fake_path" in p)
     deps.fix_up_darwin_libraries(
         "openjp2",
         search_paths=["fake_path"],
         get_dependencies_strat=get_dependencies_strat,
-        change_depend_shared_lib_name_strat=change_depend_shared_lib_name_strat,
+        change_depend_shared_lib_name_strat=Mock(
+            name="change_depend_shared_lib_name_strat"
+        ),
         deploy_library_strat=deploy_library_strat
     )
     deploy_library_strat.assert_called_once_with(
@@ -125,7 +129,8 @@ def test_otool_subprocess(monkeypatch):
 @rpath/libleptonica.6.dylib (compatibility version 6.0.0, current version 6.0.0)
 /usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1900.180.0)
 """.lstrip(),
-            [("@rpath", "libtesseract.5.5.dylib"), ("@rpath", "libleptonica.6.dylib")]
+            [("@rpath", "libtesseract.5.5.dylib"),
+             ("@rpath", "libleptonica.6.dylib")]
         ),
         (
             "/usr/local/opt/imagemagick/lib/libMagick++-7.Q16HDRI.5.dylib",
@@ -169,9 +174,9 @@ def test_otool_subprocess(monkeypatch):
     ]
 )
 def test_iter_otool_lib_dependencies(
-    library_name,
-    otool_output,
-    expected_list
+        library_name,
+        otool_output,
+        expected_list
 ):
     assert list(deps.iter_otool_lib_dependencies(
         library_name,
@@ -222,9 +227,95 @@ def test_run_patchelf_needed(monkeypatch):
 def test_is_linux_system_libraries(library, expected):
     assert deps.is_linux_system_libraries(library) == expected
 
+
 def test_deploy_darwin_shared_lib(monkeypatch):
     copy2 = Mock()
     monkeypatch.setattr(deps.shutil, "copy2", copy2)
     fix_up_strategy = Mock()
     deps.deploy_darwin_shared_lib("start", "dest", fix_up_strategy)
     fix_up_strategy.assert_called_once_with("dest")
+
+
+class TestFixUpWindowsLibraries:
+    def test_get_dependencies(self):
+        fixer = deps.FixUpWindowsLibraries([])
+        fixer.dependency_search_strategy = Mock()
+        fixer.get_dependencies("zstd.dll")
+        fixer.dependency_search_strategy.assert_called_once_with("zstd.dll")
+
+    def test_find_shared_library(self, monkeypatch):
+        fixer = deps.FixUpWindowsLibraries(["spam_path"])
+        monkeypatch.setattr(
+            deps.os.path,
+            "exists",
+            lambda p: os.path.join("spam_path", "zstd.dll")
+        )
+        assert fixer.find_shared_library("zstd.dll") ==\
+               os.path.join("spam_path", "zstd.dll")
+
+    def test_deploy_and_fixup_library(self):
+        fixer = deps.FixUpWindowsLibraries(["spam_path"])
+        fixer.deploy = Mock()
+        fixer.fix_up = Mock()
+        fixer.deploy_and_fixup_library("spam_path/zstd.dll", "dest/zstd.dll")
+
+        fixer.deploy.assert_called()
+        fixer.fix_up.assert_called()
+
+    def test_fix_up(self):
+        fixer = deps.FixUpWindowsLibraries(["spam_path"])
+        fixer.deploy = Mock()
+        fixer.deploy_and_fixup_library = Mock()
+        fixer.find_shared_library = Mock(return_value="zstd.dll")
+        fixer.get_dependencies =\
+            Mock(return_value=["zstd.dll", "KERNEL32.dll"])
+
+        fixer.fix_up(os.path.join("spam_path", "eggs.pyd"))
+
+        fixer.deploy_and_fixup_library.assert_called_once_with(
+            "zstd.dll", os.path.join("spam_path", "zstd.dll")
+        )
+
+    def test_fix_up_missing_file(self):
+        fixer = deps.FixUpWindowsLibraries(["spam_path"])
+        fixer.deploy = Mock()
+        fixer.deploy_and_fixup_library = Mock()
+        fixer.find_shared_library = Mock(return_value=None)
+        fixer.get_dependencies =\
+            Mock(return_value=["zstd.dll", "KERNEL32.dll"])
+
+        with pytest.raises(FileNotFoundError):
+            fixer.fix_up(os.path.join("spam_path", "eggs.pyd"))
+
+    def test_fix_up_skips_existing(self, monkeypatch):
+        fixer = deps.FixUpWindowsLibraries(["spam_path"])
+        fixer.deploy = Mock()
+        fixer.deploy_and_fixup_library = Mock()
+        fixer.get_dependencies = Mock(
+            return_value=["zstd.dll", "zlib.dll", "KERNEL32.dll"]
+        )
+        fixer.find_shared_library = lambda x: x
+        with monkeypatch.context() as m:
+            # simulate that zlib.dll already exists
+            m.setattr(
+                deps.os.path,
+                "exists",
+                lambda p: p == os.path.join("spam_path", "zlib.dll")
+            )
+            fixer.fix_up(os.path.join("spam_path", "eggs.pyd"))
+
+        fixer.deploy_and_fixup_library.assert_called_once_with(
+            "zstd.dll", os.path.join("spam_path", "zstd.dll")
+        )
+
+def test_fix_up_windows_libraries():
+    fixup_obj = Mock(spec_set=deps.FixUpWindowsLibraries)
+    fixup_klass = Mock(return_value=fixup_obj)
+    deps.fix_up_windows_libraries(
+        "openjp2",
+        search_paths=["fake_path"],
+        exclude_libraries=["some_system_lib.dll"],
+        fixup_klass=fixup_klass
+    )
+    fixup_klass.assert_called_once_with(["fake_path"], exclude_libraries=["some_system_lib.dll"])
+    fixup_obj.fix_up.assert_called_once_with("openjp2")
