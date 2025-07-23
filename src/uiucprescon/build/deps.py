@@ -1,3 +1,5 @@
+"""Dependency management for libraries on different platforms."""
+
 from __future__ import annotations
 
 import contextlib
@@ -598,6 +600,7 @@ def fixup_library(
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
 ):
+    """Fix up the library by add its dependencies adjacent to it."""
     fix_up_strategy = DEFAULT_FIXUP_LIBRARY_STRATEGIES.get(platform.system())
     if fix_up_strategy is None:
         raise NotImplementedError(

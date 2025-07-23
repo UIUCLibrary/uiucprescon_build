@@ -1,3 +1,4 @@
+"""PEP 517 backend for building Python packages."""
 import os
 
 import setuptools
@@ -18,6 +19,7 @@ def build_sdist(
     sdist_directory: str,
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> str:
+    """Build a source distribution."""
     return setuptools.build_meta.build_sdist(sdist_directory, config_settings)
 
 
@@ -26,6 +28,7 @@ def build_wheel(
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
     metadata_directory: Optional[str] = None,
 ) -> str:
+    """Build a wheel."""
     if platform.system() == "Windows":
         monkey.patch_for_msvc_specialized_compiler()
     if (
@@ -91,6 +94,7 @@ def build_wheel(
 def get_requires_for_build_sdist(
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> List[str]:
+    """Get the requirements for building a source distribution."""
     return []
 
 
@@ -98,6 +102,7 @@ def prepare_metadata_for_build_wheel(
     metadata_directory: str,
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> str:
+    """Prepare metadata for building a wheel."""
     return setuptools.build_meta.prepare_metadata_for_build_wheel(
         metadata_directory, config_settings
     )
@@ -106,6 +111,7 @@ def prepare_metadata_for_build_wheel(
 def get_requires_for_build_wheel(
     config_settings: Optional[Dict[str, Union[str, List[str], None]]] = None,
 ) -> List[str]:
+    """Get the requirements for building a wheel."""
     return ["wheel >= 0.25", "setuptools", "pybind11>=2.5", "toml"]
 
 
@@ -116,6 +122,7 @@ def build_editable(
     ] = None,
     metadata_directory: Optional[str] = None,
 ):
+    """Build an editable wheel."""
     return setuptools.build_meta.build_editable(
         wheel_directory, config_settings, metadata_directory
     )

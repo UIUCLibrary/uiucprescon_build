@@ -1,3 +1,5 @@
+"""Building pybind11 extensions with custom build_ext command."""
+
 from __future__ import annotations
 import abc
 import warnings
@@ -26,6 +28,8 @@ class AbsFindLibrary(abc.ABC):
     def locate(self, library_name: str) -> Optional[str]:
         """Abstract method for locating a library."""
 
+__all__ = ["BuildPybind11Extension"]
+
 
 def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
     if not os.path.exists(conanbuildinfo):
@@ -39,11 +43,13 @@ def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
 
 
 class BuildPybind11Extension(build_ext):
+    """Custom build_ext Setuptools command for building pybind11 extensions."""
     user_options = build_ext.user_options + [
         ("cxx-standard=", None, "C++ version to use. Default:11")
     ]
 
     def finalize_options(self) -> None:
+        """Finalize options for the build."""
         super().finalize_options()
 
         # self.inplace keeps getting reset by the time it is needed so
@@ -53,6 +59,7 @@ class BuildPybind11Extension(build_ext):
     def find_deps(
         self, lib: str, search_paths: Optional[List[str]] = None
     ) -> Optional[str]:
+        """Find c library dependency in the search paths."""
         search_paths = search_paths or os.environ["path"].split(";")
 
         search_paths.append(
@@ -73,6 +80,7 @@ class BuildPybind11Extension(build_ext):
     def find_missing_libraries(
         self, ext: Extension, strategies: Optional[List[AbsFindLibrary]] = None
     ) -> List[str]:
+        """Locate libraries that are missing from the extension."""
         strategies = strategies or [
             UseSetuptoolsCompilerFileLibrary(
                 compiler=self.compiler,
@@ -137,6 +145,7 @@ class BuildPybind11Extension(build_ext):
         )
 
     def build_extension(self, ext: Pybind11Extension) -> None:
+        """Build the extension."""
         super().build_extension(ext)
         fullname = self.get_ext_fullname(ext.name)
         created_extension = os.path.join(
@@ -153,6 +162,7 @@ class BuildPybind11Extension(build_ext):
             self.spawn(["ldd", created_extension])
 
     def get_pybind11_include_path(self) -> str:
+        """Get the include path for pybind11."""
         return pybind11.get_include()
 
     def _add_conan_libs_to_ext(self, ext: Pybind11Extension) -> None:

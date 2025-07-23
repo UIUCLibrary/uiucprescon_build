@@ -250,7 +250,8 @@ def add_all_libs(
     extension: setuptools.extension.Extension,
     text_md: ConanBuildInfo
 ) -> None:
-    """
+    """Do not use.
+
     This strategy adds all libraries from the extension to the extension's
     libraries list.
     """
