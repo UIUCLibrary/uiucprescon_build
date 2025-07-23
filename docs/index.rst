@@ -18,7 +18,7 @@ User's Guide
    :maxdepth: 2
 
    quickstart
-
+   setup_dev_env
 
 
 Indices and tables
