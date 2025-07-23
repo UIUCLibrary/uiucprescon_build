@@ -23,12 +23,13 @@ if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
 
 
+__all__ = ["BuildPybind11Extension"]
+
+
 class AbsFindLibrary(abc.ABC):
     @abc.abstractmethod
     def locate(self, library_name: str) -> Optional[str]:
         """Abstract method for locating a library."""
-
-__all__ = ["BuildPybind11Extension"]
 
 
 def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
