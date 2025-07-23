@@ -1,3 +1,5 @@
+"""Handling files related to Conan."""
+
 import dataclasses
 import io
 import os
@@ -67,6 +69,8 @@ class ConanLibraryMetadata(TypedDict):
 
 
 class ConanBuildInfo(TypedDict):
+    """Conan build info data structure."""
+
     definitions: List[str]
     include_paths: List[str]
     lib_paths: List[str]
@@ -193,6 +197,7 @@ def get_linking_libraries_fp(
     library_name: str,
     conan_build_info_fp: io.TextIOWrapper
 ) -> List[str]:
+    """Get the linking libraries for a library from a Conan build info file."""
     original_position = conan_build_info_fp.tell()
     try:
         data = json.load(conan_build_info_fp)
@@ -301,6 +306,7 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
 def get_library_metadata_from_build_info_json(
     library_name, fp: io.TextIOWrapper
 ) -> Optional[CLibCompilerMetadata]:
+    """Get the metadata for a library from a Conan build info JSON file."""
     metadata = CLibCompilerMetadata()
     original_position = fp.tell()
     try:
@@ -348,6 +354,7 @@ def get_library_metadata_from_build_info_json(
 
 
 def read_conan_build_info_json(fp: io.TextIOWrapper):
+    """Read a Conan build info JSON file and return the relevant data."""
     definitions: List[str] = []
     include_paths: List[str] = []
     lib_dirs: List[str] = []
@@ -405,6 +412,7 @@ def read_conan_build_info_json(fp: io.TextIOWrapper):
 def parse_conan_build_info(
         conan_build_info_file: str, section: str
 ) -> Set[str]:
+    """Parse a section from a Conan build info file."""
     items = set()
     with open(conan_build_info_file, encoding="utf-8") as f:
         found = False

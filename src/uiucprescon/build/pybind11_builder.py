@@ -45,6 +45,7 @@ def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
 
 class BuildPybind11Extension(build_ext):
     """Custom build_ext Setuptools command for building pybind11 extensions."""
+
     user_options = build_ext.user_options + [
         ("cxx-standard=", None, "C++ version to use. Default:11")
     ]

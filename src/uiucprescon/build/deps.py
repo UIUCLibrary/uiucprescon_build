@@ -12,7 +12,8 @@ import sys
 import sysconfig
 import shutil
 from typing import (
-    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple
+    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple,
+    Type
 )
 import warnings
 
@@ -257,6 +258,11 @@ def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
     return parse_dumpbin_data(process.stdout)
 
 
+LINUX_SYSTEM_LIBRARIES = [
+    "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+]
+
+
 def use_readelf_to_determine_deps(
     library_path: str,
     run_readelf_strategy: Optional[Callable[[str], str]] = None,
@@ -275,15 +281,12 @@ def use_readelf_to_determine_deps(
 
     run_readelf: Callable[[str], str] = run_readelf_strategy or _run_readelf
     deps = []
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
-    ]
     for line in run_readelf(library_path).split("\n"):
         if "Shared library:" in line:
             parts = line.split()
             lib = parts[-1].lstrip("[").rstrip("]")
             is_system_lib = False
-            for system_lib in system_libs:
+            for system_lib in LINUX_SYSTEM_LIBRARIES:
                 if system_lib in lib:
                     is_system_lib = True
                     continue
@@ -301,11 +304,8 @@ def run_patchelf_needed(
 
 
 def is_linux_system_libraries(library: str) -> bool:
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
-    ]
     if any(os.path.basename(library).startswith(system_lib)
-           for system_lib in system_libs):
+           for system_lib in LINUX_SYSTEM_LIBRARIES):
         return True
     return False
 
@@ -562,7 +562,7 @@ def fix_up_windows_libraries(
     library: str,
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-    fixup_klass = FixUpWindowsLibraries,
+    fixup_klass: Type[FixUpWindowsLibraries] = FixUpWindowsLibraries,
 ) -> None:
     fixer = fixup_klass(search_paths, exclude_libraries=exclude_libraries)
     return fixer.fix_up(library)

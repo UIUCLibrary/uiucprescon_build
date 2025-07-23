@@ -1,3 +1,5 @@
+"""Conan v2 build utilities for building dependencies."""
+
 from __future__ import annotations
 import functools
 import json
@@ -305,6 +307,7 @@ def build_deps_with_conan(
     install_libs: bool = True,
     announce: Optional[Callable[[AnyStr, int], None]] = None,
 ) -> ConanBuildInfo:
+    """Build dependencies with conan."""
     if conanfile is None:
         raise ValueError("conanfile cannot be None")
     verbose = False
