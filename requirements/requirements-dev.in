@@ -5,6 +5,7 @@ coverage
 flake8
 lxml
 mypy
+pre-commit
 pybind11
 pydocstyle
 pytest
