@@ -1,3 +1,5 @@
+"""Setuptools command to build dependencies with Conan package manager."""
+
 from __future__ import annotations
 import functools
 import io
@@ -30,7 +32,7 @@ from uiucprescon.build.compiler_info import (
 )
 from uiucprescon.build.conan import conan_api
 from uiucprescon.build.conan.files import (
-    ConanBuildInfo, ConanBuildInfoParser,
+    ConanBuildInfo,
     read_conan_build_info_json,
     parse_conan_build_info,
     get_library_metadata_from_build_info_json,
@@ -41,7 +43,7 @@ from uiucprescon.build.conan.utils import LanguageStandardsVersion
 if TYPE_CHECKING:
     import distutils.ccompiler
 
-__all__ = ["ConanBuildInfoParser"]
+__all__ = ["BuildConan"]
 
 
 class AbsConanBuildInfo(abc.ABC):
@@ -54,6 +56,7 @@ class AbsResultTester(abc.ABC):
     def __init__(
         self, compiler: Optional[distutils.ccompiler.CCompiler] = None
     ) -> None:
+        warnings.warn("Don't use", DeprecationWarning)
         self.compiler = compiler or self._get_compiler()
 
     @staticmethod
@@ -66,8 +69,7 @@ class AbsResultTester(abc.ABC):
         return build_ext.compiler
 
     def test_shared_libs(self, libs_dir: str) -> None:
-        """Make sure all shared libraries in directory are linked"""
-
+        """Make sure all shared libraries in directory are linked."""
         for lib in os.scandir(libs_dir):
             if not lib.name.endswith(self.compiler.shared_lib_extension):
                 continue
@@ -75,7 +77,7 @@ class AbsResultTester(abc.ABC):
 
     @abc.abstractmethod
     def test_binary_dependents(self, file_path: Path) -> None:
-        """Make sure shared library is linked"""
+        """Make sure shared library is linked."""
 
 
 class MacResultTester(AbsResultTester):
@@ -248,10 +250,12 @@ def add_all_libs(
     extension: setuptools.extension.Extension,
     text_md: ConanBuildInfo
 ) -> None:
-    """
+    """Do not use.
+
     This strategy adds all libraries from the extension to the extension's
     libraries list.
     """
+    warnings.warn("Don't use", DeprecationWarning)
     include_dirs = text_md["include_paths"]
     library_dirs = text_md["lib_paths"]
     define_macros = [(d, None) for d in text_md.get("definitions", [])]
@@ -314,6 +318,8 @@ def get_conan_options() -> List[str]:
 
 
 class BuildConan(setuptools.Command):
+    """Build dependencies with Conan package manager."""
+
     user_options = [
         ("conan-cache=", None, "conan cache directory"),
         ("compiler-version=", None, "Compiler version"),
@@ -324,6 +330,7 @@ class BuildConan(setuptools.Command):
     description = "Get the required dependencies from a Conan package manager"
 
     def initialize_options(self) -> None:
+        """Initialize options."""
         self.conan_cache: Optional[str] = None
         self.compiler_version: Optional[str] = None
         self.compiler_libcxx: Optional[str] = None
@@ -335,11 +342,13 @@ class BuildConan(setuptools.Command):
         self.language_standards = None
 
     def __init__(self, dist: setuptools.dist.Distribution, **kw: str) -> None:
+        """Initialize the command."""
         self.install_libs = True
         self.build_libs = []
         super().__init__(dist, **kw)
 
     def finalize_options(self) -> None:
+        """Finalize options."""
         build_cmd = cast(Build, self.get_finalized_command("build"))
 
         self.conan_home = os.path.join(build_cmd.build_base, "conan")
@@ -381,6 +390,7 @@ class BuildConan(setuptools.Command):
     def getConanBuildInfo(
         self, root_dir: str
     ) -> Optional[str]:  # pragma: no cover
+        """Pending removal."""
         warnings.warn("Don't use", DeprecationWarning)
         for root, _, files in os.walk(root_dir):
             for f in files:
@@ -388,7 +398,9 @@ class BuildConan(setuptools.Command):
                     return os.path.join(root, f)
         return None
 
-    def add_deps_to_compiler(self, metadata) -> None:
+    def add_deps_to_compiler(self, metadata) -> None:  # pragma: no cover
+        """Pending removal."""
+        warnings.warn("Don't use", DeprecationWarning)
         build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
         compiler_adder = CompilerInfoAdder(build_ext_cmd)
 
@@ -415,6 +427,7 @@ class BuildConan(setuptools.Command):
                     extension.libraries.append(lib)
 
     def run(self) -> None:
+        """Build dependencies with Conan and update extensions."""
         build_ext = cast(BuildExt, self.get_finalized_command("build_ext"))
         if self.install_libs:
             if build_ext._inplace:

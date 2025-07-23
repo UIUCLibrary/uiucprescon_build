@@ -1,3 +1,5 @@
+"""This module provides functionality to introspect of setup.py extensions."""
+
 import os
 import sys
 from typing import cast, Optional
@@ -9,10 +11,8 @@ from setuptools.command.build_ext import build_ext
 
 
 class BuildExtInfo(Command):
-    """
-    A command to build the extension and return build information.
-    This is a placeholder for the actual implementation.
-    """
+    """A command to build the extension and return build information."""
+
     build_dir: Optional[str]
 
     description = "Build the extension and return build information."
@@ -75,6 +75,10 @@ class BuildExtInfo(Command):
 
 
 def get_extension_build_info():
+    """Retrieve the build information for extensions from the setup.py file.
+
+    This creates a setuptools_introspection.json file in the build directory
+    """
     og = sys.argv.copy()
     setuptools_introspection = None
     try:

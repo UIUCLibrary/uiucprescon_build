@@ -1,3 +1,4 @@
+import warnings
 import platform
 import re
 import sys
@@ -5,6 +6,10 @@ import subprocess  # nosec B404
 import os
 
 from uiucprescon.build.errors import PlatformError, ExecError
+warnings.warn(
+    "Don't use this module, it's deprecated & will be removed in the future.",
+    DeprecationWarning
+)
 
 __all__ = ["get_compiler_version", "get_compiler_name"]
 

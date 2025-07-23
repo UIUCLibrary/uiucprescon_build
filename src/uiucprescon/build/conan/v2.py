@@ -1,3 +1,5 @@
+"""Conan v2 build utilities for building dependencies."""
+
 from __future__ import annotations
 import functools
 import json
@@ -23,7 +25,6 @@ import yaml
 
 from uiucprescon.build.compiler_info import get_compiler_version
 from uiucprescon.build.conan.files import read_conan_build_info_json
-from .utils import copy_conan_imports_from_manifest
 
 from conan.api.conan_api import ConanAPI
 from conan.cli.cli import Cli
@@ -306,6 +307,7 @@ def build_deps_with_conan(
     install_libs: bool = True,
     announce: Optional[Callable[[AnyStr, int], None]] = None,
 ) -> ConanBuildInfo:
+    """Build dependencies with conan."""
     if conanfile is None:
         raise ValueError("conanfile cannot be None")
     verbose = False
@@ -348,12 +350,6 @@ def build_deps_with_conan(
             verbose,
             debug,
         )
-    if install_libs:
-        import_manifest = os.path.join(build_dir, "conan_imports_manifest.txt")
-        if os.path.exists(import_manifest):
-            copy_conan_imports_from_manifest(
-                import_manifest, path=build_dir, dest=install_dir
-            )
     with open(build_json, "r", encoding="utf-8") as f:
         build_info = read_conan_build_info_json(f)
 

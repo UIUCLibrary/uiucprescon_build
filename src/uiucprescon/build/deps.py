@@ -1,3 +1,5 @@
+"""Dependency management for libraries on different platforms."""
+
 from __future__ import annotations
 
 import contextlib
@@ -10,7 +12,8 @@ import sys
 import sysconfig
 import shutil
 from typing import (
-    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple
+    List, Callable, Optional, Union, Set, Dict, TYPE_CHECKING, Iterable, Tuple,
+    Type
 )
 import warnings
 
@@ -19,6 +22,8 @@ from setuptools.msvc import EnvironmentInfo
 from .msvc import msvc14_get_vc_env
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
+
+__all__ = ["fixup_library"]
 
 DEPS_REGEX = (
     r"(?<=(Image has the following dependencies:(\n){2}))((?<=\s).*\.dll\n)*"
@@ -76,16 +81,21 @@ WINDOWS_SYSTEM_DLLS = {
 }
 
 
+def is_windows_system_lib(lib: str) -> bool:
+    if lib.startswith("api-ms-win-crt"):
+        return True
+
+    if lib.startswith("python"):
+        return True
+
+    if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+        return True
+
+
 def remove_windows_system_libs(libs: List[str]) -> List[str]:
     non_system_dlls = []
     for lib in libs:
-        if lib.startswith("api-ms-win-crt"):
-            continue
-
-        if lib.startswith("python"):
-            continue
-
-        if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
+        if is_windows_system_lib(lib):
             continue
         non_system_dlls.append(lib)
     return non_system_dlls
@@ -248,6 +258,11 @@ def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
     return parse_dumpbin_data(process.stdout)
 
 
+LINUX_SYSTEM_LIBRARIES = [
+    "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
+]
+
+
 def use_readelf_to_determine_deps(
     library_path: str,
     run_readelf_strategy: Optional[Callable[[str], str]] = None,
@@ -266,15 +281,12 @@ def use_readelf_to_determine_deps(
 
     run_readelf: Callable[[str], str] = run_readelf_strategy or _run_readelf
     deps = []
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
-    ]
     for line in run_readelf(library_path).split("\n"):
         if "Shared library:" in line:
             parts = line.split()
             lib = parts[-1].lstrip("[").rstrip("]")
             is_system_lib = False
-            for system_lib in system_libs:
+            for system_lib in LINUX_SYSTEM_LIBRARIES:
                 if system_lib in lib:
                     is_system_lib = True
                     continue
@@ -292,11 +304,8 @@ def run_patchelf_needed(
 
 
 def is_linux_system_libraries(library: str) -> bool:
-    system_libs = [
-        "libm", "libstdc++", "libgcc", "libc", "libpthread", "ld-linux"
-    ]
     if any(os.path.basename(library).startswith(system_lib)
-           for system_lib in system_libs):
+           for system_lib in LINUX_SYSTEM_LIBRARIES):
         return True
     return False
 
@@ -490,43 +499,73 @@ def fix_up_darwin_libraries(
         )
 
 
-def fix_up_windows_libraries(
-    library: str,
-    search_paths: List[str],
-    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
-    determine_dependencies_strategy: Callable[
-        [str], List[str]
-    ] = use_dumpbin_to_determine_deps,
-) -> None:
-    depending_libraries = remove_windows_system_libs(
-        determine_dependencies_strategy(library)
-    )
-    output_path = os.path.dirname(library)
-    for depending_library in depending_libraries:
-        if exclude_libraries:
-            if depending_library.lower() in {
-                lib.lower() for lib in exclude_libraries
-            }:
+class FixUpWindowsLibraries:
+
+    def __init__(self, search_paths: List[str], exclude_libraries=None):
+        super().__init__()
+        self.exclude_libraries = exclude_libraries or []
+        self.search_paths = search_paths
+        self.dependency_search_strategy = use_dumpbin_to_determine_deps
+        self.filter_system_libs = remove_windows_system_libs
+        self.library_exclusion_filters = [
+            lambda lib: not is_windows_system_lib(lib),
+            lambda lib: lib.lower() not in [
+                ex_lib.lower() for ex_lib in self.exclude_libraries
+            ]
+        ]
+        self.deploy = shutil.copy2
+
+    def get_dependencies(self, library: str) -> List[str]:
+        return self.dependency_search_strategy(library)
+
+    def find_shared_library(self, library: str) -> Optional[str]:
+        for path in self.search_paths:
+            matching_dll = os.path.join(
+                path, os.path.basename(library)
+            )
+            if os.path.exists(matching_dll):
+                return matching_dll
+
+    def deploy_and_fixup_library(
+        self,
+        source_library: str,
+        output_library: str
+    ) -> None:
+        self.deploy(source_library, output_library)
+        self.fix_up(output_library)
+
+    def fix_up(self, library: str) -> None:
+        depending_libraries = self.get_dependencies(library)
+        for f in self.library_exclusion_filters:
+            depending_libraries = filter(f, depending_libraries)
+
+        for depending_library in depending_libraries:
+            output_library =\
+                os.path.join(os.path.dirname(library), depending_library)
+
+            if os.path.exists(output_library):
+                # No need to copy it again if already added from another dep
                 continue
-        if not os.path.exists(os.path.join(output_path, depending_library)):
-            for path in search_paths:
-                matching_dll = os.path.join(
-                    path, os.path.basename(depending_library)
-                )
-                if os.path.exists(matching_dll):
-                    output_library = os.path.join(
-                        output_path, depending_library
-                    )
-                    print(f"Copying {matching_dll} to {output_library}")
-                    shutil.copy2(matching_dll, output_library)
-                    fixup_library(
-                        output_library, search_paths, exclude_libraries
-                    )
-                    break
+
+            if matching_dll := self.find_shared_library(
+                os.path.basename(depending_library)
+            ):
+                print(f"Copying {matching_dll} to {output_library}")
+                self.deploy_and_fixup_library(matching_dll, output_library)
             else:
                 raise FileNotFoundError(
                     f"Unable to locate {depending_library}"
                 )
+
+
+def fix_up_windows_libraries(
+    library: str,
+    search_paths: List[str],
+    exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
+    fixup_klass: Type[FixUpWindowsLibraries] = FixUpWindowsLibraries,
+) -> None:
+    fixer = fixup_klass(search_paths, exclude_libraries=exclude_libraries)
+    return fixer.fix_up(library)
 
 
 DEFAULT_FIXUP_LIBRARY_STRATEGIES: Dict[
@@ -561,6 +600,7 @@ def fixup_library(
     search_paths: List[str],
     exclude_libraries: Optional[Union[Set[str], List[str]]] = None,
 ):
+    """Fix up the library by add its dependencies adjacent to it."""
     fix_up_strategy = DEFAULT_FIXUP_LIBRARY_STRATEGIES.get(platform.system())
     if fix_up_strategy is None:
         raise NotImplementedError(

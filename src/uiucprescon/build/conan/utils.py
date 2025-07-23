@@ -1,9 +1,12 @@
+"""Utility functions for working with Conan."""
+
 import dataclasses
 import os
 import re
 import shutil
 import subprocess  # nosec B404
 import sys
+import warnings
 from importlib.metadata import version
 from pathlib import Path
 from typing import Tuple, cast, List, Optional
@@ -11,15 +14,24 @@ from typing import Tuple, cast, List, Optional
 
 @dataclasses.dataclass
 class LanguageStandardsVersion:
+    """Data class to hold the C and C++ standards versions."""
+
     cpp_std: Optional[str] = None
     c_std: Optional[str] = None
 
 
-def get_conan_version() -> Tuple[str, str]:
+def get_conan_version() -> Tuple[str, str]:  # pragma: no cover
+    """Don't use this function, it's deprecated & will be removed."""
+    warnings.warn("use `version('conan')` instead", DeprecationWarning)
     return tuple(b for b in version("conan").split("."))
 
 
-def fixup_library(shared_library: str) -> None:
+def fixup_library(shared_library: str) -> None:  # pragma: no cover
+    """Don't use this function, it's deprecated & will be removed."""
+    warnings.warn(
+        "use `uiucprescon.build.deps.fixup_library` instead",
+        DeprecationWarning
+    )  # pragma: no cover
     if sys.platform == "darwin":
         otool = shutil.which("otool")
         install_name_tool = shutil.which("install_name_tool")
@@ -79,6 +91,7 @@ def fixup_library(shared_library: str) -> None:
 def copy_conan_imports_from_manifest(
     import_manifest_file: str, path: str, dest: str
 ) -> None:
+    """Copy libraries from a Conan import manifest file to destination path."""
     libs: List[str] = []
     with open(import_manifest_file, "r", encoding="utf8") as f:
         for line in f.readlines():

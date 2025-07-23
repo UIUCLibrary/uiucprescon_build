@@ -1,3 +1,5 @@
+"""PEP 517 compliant build backend for C and C++ extensions for Python."""
+
 from .local_backend import (
     build_sdist,
     build_wheel,

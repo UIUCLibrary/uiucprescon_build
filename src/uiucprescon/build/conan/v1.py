@@ -43,6 +43,7 @@ def build_deps_with_conan(
     install_libs=True,
     announce=None,
 ):
+    """Build dependencies with conan."""
     conan = conan_api.Conan(
         cache_folder=os.path.abspath(conan_cache) if conan_cache else None
     )

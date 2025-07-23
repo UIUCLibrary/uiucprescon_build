@@ -1,11 +1,11 @@
 import json
 import os
 import sys
-from platform import python_version
 
 import pytest
 from uiucprescon import build
 from importlib_metadata import version
+
 
 def test_conan_integration(tmp_path, monkeypatch):
     source_root = tmp_path / "package"
@@ -66,11 +66,15 @@ class Dummy(ConanFile):
     build.build_wheel(str(output))
     assert any(f.startswith("dummy") for f in os.listdir(output))
 
+
 @pytest.fixture(scope="session")
 def zstd_example_config():
-    config_json = os.path.join(os.path.dirname(__file__), 'conan_test_libraries.json')
+    config_json =\
+        os.path.join(os.path.dirname(__file__), "conan_test_libraries.json")
+
     with open(config_json, "r", encoding="utf-8") as f:
-        return json.load(f)['conan_test_libraries']["2"]["zstd"]
+        return json.load(f)["conan_test_libraries"]["2"]["zstd"]
+
 
 @pytest.mark.skipif(
     sys.version_info < (3, 10) and sys.platform == "win32",
@@ -80,7 +84,11 @@ def zstd_example_config():
     version("conan") < "2.0.0",
     reason="Requires Conan 2.0 or higher"
 )
-def test_conan_integration_with_shared_library(tmp_path, monkeypatch, zstd_example_config):
+def test_conan_integration_with_shared_library(
+    tmp_path,
+    monkeypatch,
+    zstd_example_config
+):
     source_root = tmp_path / "package"
     source_root.mkdir()
 
@@ -98,12 +106,16 @@ class BuildPybind11Extensions(BuildPybind11Extension):
         conan_cmd = self.get_finalized_command("build_conan")
         conan_cmd.run()
         super().run()
-        module_path = os.path.join(self.build_lib, 'dummy', self.get_ext_filename("spam"))
-        module_name = 'dummy.spam' # The name you want to assign to the imported module
+        module_path =\
+            os.path.join(
+                self.build_lib, 'dummy', self.get_ext_filename("spam")
+            )
+        module_name = 'dummy.spam'
         spec = importlib.util.spec_from_file_location(module_name, module_path)
         my_dynamic_module = importlib.util.module_from_spec(spec)
-        zstd_version = my_dynamic_module.get_version()
-        assert zstd_version == "1.5.7", f"zstd_version version mismatch, expected: 1.5.7 got: {zstd_version}"
+        zstd_ver = my_dynamic_module.get_version()
+        assert zstd_ver == "1.5.7", \
+            f"version mismatch, expected: 1.5.7 got: {zstd_ver}"
 
 setup(
     name='dummy',
@@ -124,9 +136,19 @@ setup(
     """)
 
     pyproject = source_root / "pyproject.toml"
-    requires = ",\n".join([f'       "{r}"' for r in zstd_example_config["requires"]])
+    requires = ",\n".join(
+        [
+            f'       "{r}"'
+            for r in zstd_example_config["requires"]
+        ]
+    )
     default_options_string = str(
-        ",\n".join([f'       "{k}": {v}' for k, v in zstd_example_config['default_options'].items()])
+        ",\n".join(
+            [
+                f'       "{k}": {v}'
+                for k, v in zstd_example_config["default_options"].items()
+             ]
+                   )
     )
     pyproject.write_text("""
 [project]
@@ -155,7 +177,7 @@ class Dummy(ConanFile):
     }
     PYBIND11_MODULE(spam, m){
         m.doc() = R"pbdoc(Spam lovely spam)pbdoc";
-        m.def("get_version", &get_version, "Get the version of library linked to");
+        m.def("get_version", &get_version, "Get the version of lib linked to");
     }
     """)
 
