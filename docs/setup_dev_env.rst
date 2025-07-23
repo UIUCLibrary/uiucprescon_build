@@ -1,8 +1,12 @@
-==============================
+===========
+Development
+===========
+
+This document provides instructions for setting up the build environment for the project and performing recommend
+development practices.
+
 Set up Development Environment
 ==============================
-
-This document provides instructions for setting up the build environment for the project. It includes details on required tools, dependencies, and configuration steps.
 
 You can use pip but `UV <https://docs.astral.sh/uv/>`_ is recommended because it is significantly faster.
 
@@ -74,3 +78,46 @@ This will configure your development environment with all necessary dependencies
       (venv) devuser@mylaptop ~ % pre-commit install
 
 
+
+Bumping the Version
+===================
+
+Use commitizen to bump the version of the project. This will automatically update the version in the `pyproject.toml`
+file.
+
+For a release version bump, you can run:
+
+.. code-block:: shell-session
+
+   (venv) devuser@mylaptop ~ % uvx commitizen bump
+
+For a beta release version bump, you can run:
+
+.. code-block:: shell-session
+
+   (venv) devuser@mylaptop ~ % uvx commitizen bump --prerelease=beta
+
+For an alpha release version bump, you can run:
+
+.. code-block:: shell-session
+
+   (venv) devuser@mylaptop ~ % uvx commitizen bump --prerelease=alpha
+
+To bump the version to a development version, you can run:
+
+.. code-block:: shell-session
+
+   (venv) devuser@mylaptop ~ % uvx commitizen bump --allow-no-commit --patch --devrelease 1
+   (venv) devuser@mylaptop ~ % git commit -m "Next iteration"
+
+
+.. important:: Do not push a release version to the HEAD!
+
+    **Make sure before you push changes to the repository**, the version metadata
+    for the last commit is a development version (i.e. it should end in dev
+    followed by a number).
+
+    After bumping the version version, the last commit should not be something
+    like 0.1.8.
+
+    It should be something like 0.1.9.dev0.
