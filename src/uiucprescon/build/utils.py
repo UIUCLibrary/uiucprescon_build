@@ -1,3 +1,5 @@
+"""Utility functions."""
+
 import contextlib
 from typing import Optional, List, Dict
 import os
