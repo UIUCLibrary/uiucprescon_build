@@ -89,25 +89,27 @@ For a release version bump, you can run:
 
 .. code-block:: shell-session
 
-   (venv) devuser@mylaptop ~ % uvx commitizen bump
+   (venv) devuser@mylaptop ~ % cz bump
+   [main f1170a4] bump: version 0.2.6.dev16 → 0.3.0
 
 For a beta release version bump, you can run:
 
 .. code-block:: shell-session
 
-   (venv) devuser@mylaptop ~ % uvx commitizen bump --prerelease=beta
+   (venv) devuser@mylaptop ~ % cz bump --prerelease=beta
+   [main f1170a4] bump: version 0.2.6.dev16 → 0.3.0b0
 
 For an alpha release version bump, you can run:
 
 .. code-block:: shell-session
 
-   (venv) devuser@mylaptop ~ % uvx commitizen bump --prerelease=alpha
+   (venv) devuser@mylaptop ~ % cz bump --prerelease=alpha
 
 To bump the version to a development version, you can run:
 
 .. code-block:: shell-session
 
-   (venv) devuser@mylaptop ~ % uvx commitizen bump --allow-no-commit --patch --devrelease 1
+   (venv) devuser@mylaptop ~ % uvx --from commitizen cz bump --allow-no-commit --patch --devrelease 1
    (venv) devuser@mylaptop ~ % git commit -m "Next iteration"
 
 

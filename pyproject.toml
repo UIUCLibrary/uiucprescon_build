@@ -9,7 +9,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-version = "0.2.6.dev16"
+version = "0.2.6b16"
 
 dependencies = [
     "setuptools>=77.0.1",
@@ -19,7 +19,9 @@ dependencies = [
     'patchelf; sys_platform == "linux"',
     "conan",
     'toml',
-    'PyYAML'
+    'PyYAML',
+    "commitizen>=4.8.3",
+    "pre-commit>=4.2.0",
 ]
 readme = "README.md"
 license = "NCSA"
@@ -85,9 +87,6 @@ packages = [
     'uiucprescon.build.conan',
 ]
 package-dir = {"" = "src"}
-
-[tool.setuptools.dynamic]
-version = {attr = "uiucprescon.build.VERSION"}
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { file = "requirements-dev.txt" }]
