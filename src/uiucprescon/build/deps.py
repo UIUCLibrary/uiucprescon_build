@@ -20,6 +20,8 @@ from .msvc import msvc14_get_vc_env
 if TYPE_CHECKING:
     from distutils.ccompiler import CCompiler
 
+__all__ = ["fixup_library"]
+
 DEPS_REGEX = (
     r"(?<=(Image has the following dependencies:(\n){2}))((?<=\s).*\.dll\n)*"
 )
