@@ -4,7 +4,7 @@ import contextlib
 from typing import Optional, List, Dict
 import os
 
-__all__ = ["locate_file"]
+__all__ = ["locate_file", "set_env_var"]
 
 
 def locate_file(file_name: str, search_locations: List[str]) -> Optional[str]:
