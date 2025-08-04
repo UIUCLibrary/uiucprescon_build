@@ -211,6 +211,10 @@ def get_linking_libraries_fp(
 
 
 def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
+    def split_define(text: str) -> tuple[str, Optional[str]]:
+        value = text.split("=")
+        return value[0], value[1] if len(value) > 1 else None
+
     metadata = CLibCompilerMetadata()
     node = locate_node_by_id(reference_key, nodes)
     if not node:
@@ -227,8 +231,8 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
         ]
 
         metadata.definitions += [
-            (define, None) for define in data.get("defines", []) or []
-            if (define, None) not in metadata.definitions
+            split_define(define) for define in data.get("defines", []) or []
+            if split_define(define) not in metadata.definitions
         ]
 
         metadata.lib_dirs += [
