@@ -1,3 +1,14 @@
+## v0.2.7 (2025-08-04)
+
+### Feat
+
+- compiler definitions can now handle definitions with assignment
+- more system dlls identified.
+
+### Fix
+
+- recognize more Windows system libraries
+
 ## v0.2.6 (2025-07-24)
 
 ### Feat
