@@ -182,12 +182,12 @@ def locate_node_by_id(reference_key, nodes):
 
 def _locate_node_by_name(name, nodes):
     for node_key, node in nodes.items():
-        if node.get('name') == name:
+        if node.get("name") == name:
             return node_key, node
-        if cpp_info := node.get('cpp_info'):
-            root = cpp_info.get('root')
+        if cpp_info := node.get("cpp_info"):
+            root = cpp_info.get("root")
             if root:
-                for lib in (root.get('libs') or []):
+                for lib in (root.get("libs") or []):
                     if lib == name:
                         return node_key, node
     return None, None
@@ -201,10 +201,10 @@ def get_linking_libraries_fp(
     original_position = conan_build_info_fp.tell()
     try:
         data = json.load(conan_build_info_fp)
-        _, node = _locate_node_by_name(library_name, data['graph']['nodes'])
+        _, node = _locate_node_by_name(library_name, data["graph"]["nodes"])
         libs = []
-        for cpp_info in node['cpp_info'].values():
-            libs += cpp_info.get('libs', []) or []
+        for cpp_info in node["cpp_info"].values():
+            libs += cpp_info.get("libs", []) or []
         return libs
     finally:
         conan_build_info_fp.seek(original_position)
@@ -220,7 +220,7 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
     if not node:
         raise ValueError(f"Node with {reference_key} not found")
 
-    for data in node.get('cpp_info', {}).values():
+    for data in node.get("cpp_info", {}).values():
         metadata.include_paths += [
             include_path for include_path
             in data.get("includedirs", []) or []
@@ -263,7 +263,7 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
                 del metadata.libs[metadata.libs.index(lib)]
                 metadata.libs.append(lib)
 
-    for dep_key, dep_listing in node.get('dependencies', {}).items():
+    for dep_key, dep_listing in node.get("dependencies", {}).items():
         if dep_listing["skip"] is True:
             continue
         dependency_metadata = _get_from_ref(dep_key, nodes)
@@ -280,7 +280,7 @@ def _get_from_ref(reference_key: str, nodes) -> CLibCompilerMetadata:
             define for define in dependency_metadata.definitions
             if define not in metadata.definitions
         ]
-        if dep_listing['libs'] is True:
+        if dep_listing["libs"] is True:
             metadata.lib_dirs += [
                 lib_dir for lib_dir in dependency_metadata.lib_dirs
                 if all([
@@ -323,7 +323,7 @@ def get_library_metadata_from_build_info_json(
                 category=UserWarning,
             )
             return None
-        nodes = data['graph']['nodes']
+        nodes = data["graph"]["nodes"]
         key, node = _locate_node_by_name(library_name, nodes)
         if not node:
             return None
@@ -365,13 +365,13 @@ def read_conan_build_info_json(fp: io.TextIOWrapper):
     bin_paths: List[str] = []
     libs: List[str] = []
     data = json.loads(fp.read())
-    for node in data['graph']['nodes'].values():
-        if node.get('name') is None:
+    for node in data["graph"]["nodes"].values():
+        if node.get("name") is None:
             continue
-        for data in node.get('cpp_info', {}).values():
+        for data in node.get("cpp_info", {}).values():
             include_paths += [
-                include_path for include_path
-                in data.get("includedirs", []) or []
+                include_path
+                for include_path in data.get("includedirs", []) or []
                 if all([
                     include_path not in include_paths,
                     os.path.exists(include_path)
@@ -384,7 +384,8 @@ def read_conan_build_info_json(fp: io.TextIOWrapper):
             ]
 
             lib_dirs += [
-                lib_dir for lib_dir in data.get("libdirs", []) or []
+                lib_dir
+                for lib_dir in data.get("libdirs", []) or []
                 if all([
                     lib_dir not in lib_dirs,
                     os.path.exists(lib_dir)
@@ -392,7 +393,8 @@ def read_conan_build_info_json(fp: io.TextIOWrapper):
             ]
 
             bin_paths += [
-                bindir for bindir in data.get("bindirs", []) or []
+                bindir
+                for bindir in data.get("bindirs", []) or []
                 if all([
                     bindir not in bin_paths,
                     os.path.exists(bindir)
