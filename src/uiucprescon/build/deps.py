@@ -55,7 +55,6 @@ def get_platform() -> str:
 def parse_dumpbin_data(data: str) -> List[str]:
     dlls = []
     dep_regex = re.compile(DEPS_REGEX)
-    print(f"Using {DEPS_REGEX}")
     d = dep_regex.search(data)
     if d is None:
         print(
@@ -94,6 +93,12 @@ WINDOWS_SYSTEM_DLLS = {
 
 
 def is_windows_system_lib(lib: str) -> bool:
+    if os.path.exists(os.path.join("C:\\", "Windows", "System32", lib)):
+        return True
+
+    if os.path.exists(os.path.join("C:\\", "Windows", "SysWOW64", lib)):
+        return True
+
     if lib.startswith("api-ms-win-crt"):
         return True
 
@@ -102,6 +107,8 @@ def is_windows_system_lib(lib: str) -> bool:
 
     if lib.upper() in [lib.upper() for lib in WINDOWS_SYSTEM_DLLS]:
         return True
+
+    return False
 
 
 def remove_windows_system_libs(libs: List[str]) -> List[str]:
@@ -561,7 +568,8 @@ class FixUpWindowsLibraries:
                 self.deploy_and_fixup_library(matching_dll, output_library)
             else:
                 raise FileNotFoundError(
-                    f"Unable to locate {depending_library}"
+                    f"Unable to locate {depending_library}. "
+                    f"Needed by {library}."
                 )
 
 
