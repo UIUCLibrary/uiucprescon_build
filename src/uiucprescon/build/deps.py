@@ -282,6 +282,7 @@ def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
 
 LINUX_SYSTEM_LIBRARIES = [
     "libdl",
+    "librt",
     "libm",
     "libstdc++",
     "libgcc",
