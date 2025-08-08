@@ -281,6 +281,7 @@ def use_dumpbin_to_determine_deps(library_path: str) -> List[str]:
 
 
 LINUX_SYSTEM_LIBRARIES = [
+    "libdl",
     "libm",
     "libstdc++",
     "libgcc",
@@ -403,7 +404,8 @@ def fix_up_linux_libraries(
             break
         else:
             raise FileNotFoundError(
-                f"Unable to locate {library} in search paths"
+                f"Unable to locate {dependent_library} in search paths. "
+                f"Required by {library}"
             )
 
 
