@@ -39,6 +39,8 @@ ARG ChocolateyEnvironmentDebug=false
 ARG chocolateyVersion
 COPY ci/docker/windows/chocolatey/install.ps1 c:/choco/install.ps1
 COPY ci/docker/windows/chocolatey/get_latest_chocolatey_url.ps1 c:/choco/get_latest_chocolatey_url.ps1
+COPY ci/docker/windows/chocolatey/packages.xml choco/packages.config
+COPY ci/docker/windows/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     $chocolateyDownloadUrl = c:/choco/get_latest_chocolatey_url.ps1 -packageRepo $env:CHOCOLATEY_SOURCE; `
     c:/choco/install.ps1 -ChocolateyDownloadUrl $chocolateyDownloadUrl;`
@@ -49,12 +51,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     }; `
     Write-Host "Disabling Showing Download Progress" ; `
     choco feature disable -n=showDownloadProgress ; `
-    choco cache remove --confirm
-
-COPY ci/docker/windows/chocolatey/packages.xml choco/packages.config
-COPY ci/docker/windows/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
-RUN C:\ProgramData\chocolatey\bin\choco.exe sources ; `
-    C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
+    choco sources ; `
+    choco install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
     refreshenv ; `
     choco cache remove --confirm;`
     Write-Host "Finished install packages with Chocolatey" ;`
