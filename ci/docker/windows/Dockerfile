@@ -24,8 +24,8 @@ FROM ${FROM_IMAGE} AS BASE_BUILDER
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-COPY ci/docker/windows/tox/msvc/visual_studio_config.json c:/setup/config.vsconfig
-COPY ci/docker/windows/tox/msvc/install_msvc.ps1 c:/scripts/install_msvc.ps1
+COPY ci/docker/windows/msvc/visual_studio_config.json c:/setup/config.vsconfig
+COPY ci/docker/windows/msvc/install_msvc.ps1 c:/scripts/install_msvc.ps1
 ARG VS_INSTALL_PATH
 ARG VS_VERSION="2022"
 ARG VS_DevCmdArguments="-arch=amd64"
@@ -37,8 +37,10 @@ RUN c:/scripts/install_msvc.ps1 -InstallPath ${Env:VS_INSTALL_PATH} -VSConfigFil
 ARG CHOCOLATEY_SOURCE
 ARG ChocolateyEnvironmentDebug=false
 ARG chocolateyVersion
-COPY ci/docker/windows/tox/chocolatey/install.ps1 c:/choco/install.ps1
-COPY ci/docker/windows/tox/chocolatey/get_latest_chocolatey_url.ps1 c:/choco/get_latest_chocolatey_url.ps1
+COPY ci/docker/windows/chocolatey/install.ps1 c:/choco/install.ps1
+COPY ci/docker/windows/chocolatey/get_latest_chocolatey_url.ps1 c:/choco/get_latest_chocolatey_url.ps1
+COPY ci/docker/windows/chocolatey/packages.xml choco/packages.config
+COPY ci/docker/windows/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
 RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     $chocolateyDownloadUrl = c:/choco/get_latest_chocolatey_url.ps1 -packageRepo $env:CHOCOLATEY_SOURCE; `
     c:/choco/install.ps1 -ChocolateyDownloadUrl $chocolateyDownloadUrl;`
@@ -49,12 +51,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     }; `
     Write-Host "Disabling Showing Download Progress" ; `
     choco feature disable -n=showDownloadProgress ; `
-    choco cache remove --confirm
-
-COPY ci/docker/windows/tox/chocolatey/packages.xml choco/packages.config
-COPY ci/docker/windows/tox/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
-RUN C:\ProgramData\chocolatey\bin\choco.exe sources ; `
-    C:\ProgramData\chocolatey\bin\choco.exe install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
+    choco sources ; `
+    choco install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
     refreshenv ; `
     choco cache remove --confirm;`
     Write-Host "Finished install packages with Chocolatey" ;`
@@ -68,11 +66,11 @@ ARG UV_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
 ARG CONAN_HOME
-COPY requirements-dev.txt c:/requirements/requirements-dev.txt
-COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
-COPY ci/docker/windows/tox/conan/profile.ini ${CONAN_HOME}/profiles/default
-COPY tests/conan_test_libraries.json c:/tests/conan_test_libraries.json
 ENV UV_CONSTRAINT=c:/requirements/requirements-dev.txt
+COPY requirements-dev.txt ${UV_CONSTRAINT}
+COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
+COPY ci/docker/windows/conan/profile.ini ${CONAN_HOME}/profiles/default
+COPY tests/conan_test_libraries.json c:/tests/conan_test_libraries.json
 ARG CONAN_CENTER_PROXY_V2_URL
 RUN $json = Get-Content 'c:/tests/conan_test_libraries.json' | ConvertFrom-Json ;`
     $requires = ($json.conan_test_libraries.'2'.zstd.requires | ForEach-Object { """--requires=$_"""}) -join ' '; `
