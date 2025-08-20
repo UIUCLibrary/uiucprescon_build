@@ -28,21 +28,8 @@ def test_conan_integration(tmp_path, pybind_only_example, monkeypatch):
     assert any(f.startswith("dummy") for f in os.listdir(output))
 
 
-@pytest.fixture(scope="session")
-def zstd_example_config():
-    source_files_folder = os.path.join(
-        os.path.dirname(__file__), "test_files", "zstd_from_conan"
-    )
-    with open(
-        os.path.join(source_files_folder, "conan_test_libraries.json"),
-        "r",
-        encoding="utf-8",
-    ) as f:
-        return json.load(f)["conan_test_libraries"]["2"]["zstd"]
-
-
 @pytest.fixture
-def zstd_from_conan_example(tmp_path, zstd_example_config):
+def zstd_from_conan_example(tmp_path):
     source_root = tmp_path / "package"
     source_root.mkdir()
     pybind_only_source_folder = os.path.join(
