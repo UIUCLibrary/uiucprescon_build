@@ -13,13 +13,14 @@ from setuptools.extension import Extension
 from setuptools.command.build_clib import build_clib as BuildClib
 
 import pybind11
-from pybind11.setup_helpers import Pybind11Extension, build_ext
+from pybind11.setup_helpers import build_ext
 
 from uiucprescon.build.utils import locate_file
 from uiucprescon.build import deps, conan_libs
 from uiucprescon.build.conan.files import parse_conan_build_info
 
 if TYPE_CHECKING:
+    from pybind11.setup_helpers import Pybind11Extension
     from distutils.ccompiler import CCompiler
 
 
