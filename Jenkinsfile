@@ -275,13 +275,13 @@ pipeline {
                                             }
                                             steps{
                                                 milestone ordinal: 1, label: 'sonarcloud'
+                                                withSonarQubeEnv(installationName: 'sonarcloud', credentialsId: params.SONARCLOUD_TOKEN) {
+                                                    sh(
+                                                        label: 'Running Sonar Scanner',
+                                                        script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
+                                                    )
+                                                }
                                                 script{
-                                                    withSonarQubeEnv(installationName: 'sonarcloud', credentialsId: params.SONARCLOUD_TOKEN) {
-                                                        sh(
-                                                            label: 'Running Sonar Scanner',
-                                                            script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
-                                                        )
-                                                    }
                                                     timeout(time: 1, unit: 'HOURS') {
                                                         def sonarqubeResult = waitForQualityGate(abortPipeline: false)
                                                         if (sonarqubeResult.status != 'OK') {
