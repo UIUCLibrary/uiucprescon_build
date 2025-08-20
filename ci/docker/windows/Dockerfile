@@ -70,19 +70,16 @@ ENV UV_CONSTRAINT=c:/requirements/requirements-dev.txt
 COPY requirements-dev.txt ${UV_CONSTRAINT}
 COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
 COPY ci/docker/windows/conan/profile.ini ${CONAN_HOME}/profiles/default
-COPY tests/conan_test_libraries.json c:/tests/conan_test_libraries.json
+COPY tests/test_files/zstd_from_conan/conanfile.py c:/tests/test_files/zstd_from_conan/conanfile.py
 ARG CONAN_CENTER_PROXY_V2_URL
-RUN $json = Get-Content 'c:/tests/conan_test_libraries.json' | ConvertFrom-Json ;`
-    $requires = ($json.conan_test_libraries.'2'.zstd.requires | ForEach-Object { """--requires=$_"""}) -join ' '; `
-    $options = ($json.conan_test_libraries.'2'.zstd.default_options.PSObject.Properties | ForEach-Object { """-o=$($_.Name)=$($_.Value)""" }) -join ' ';`
-    uvx --with cmake --with ninja conan profile detect --exist-ok ; `
+RUN uvx --with cmake --with ninja conan profile detect --exist-ok ; `
     $conanCenterUrl = (((Get-Content -Raw -Path ${Env:CONAN_HOME}\remotes.json) | ConvertFrom-Json).remotes[0].url);`
     if (${env:CONAN_CENTER_PROXY_V2_URL} -ne ${conanCenterUrl}) { `
       Write-Host "Using a proxy for conan center: $Env:CONAN_CENTER_PROXY_V2_URL" ; `
       Copy-Item -Path "${Env:CONAN_HOME}\remotes.json" -Destination "c:\remotes.json" ; `
       uvx --with cmake --with ninja conan remote update conan-center --url ${env:CONAN_CENTER_PROXY_V2_URL}; `
     }; `
-    uvx --with cmake --with ninja conan install $requires  --build=missing $options; `
+    uvx --with cmake --with ninja conan install c:/tests/test_files/zstd_from_conan/conanfile.py --build=missing -pr:b=default ; `
     if ($LASTEXITCODE -ne 0) { `
       throw \"Command 'conan install' failed with exit code: $LASTEXITCODE\"`
     } ;`
