@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 
 import pytest
@@ -7,61 +8,21 @@ from uiucprescon import build
 from importlib_metadata import version
 
 
-def test_conan_integration(tmp_path, monkeypatch):
+@pytest.fixture()
+def pybind_only_example(tmp_path):
     source_root = tmp_path / "package"
     source_root.mkdir()
+    pybind_only_source_folder = os.path.join(
+        os.path.dirname(__file__), "test_files", "pybind_only"
+    )
+    shutil.copytree(pybind_only_source_folder, source_root, dirs_exist_ok=True)
+    return source_root
 
+
+def test_conan_integration(tmp_path, pybind_only_example, monkeypatch):
     home = tmp_path / "home"
-
-    setup_py = source_root / "setup.py"
-    setup_py.write_text("""
-from setuptools import setup
-from pybind11.setup_helpers import Pybind11Extension
-from uiucprescon.build.pybind11_builder import BuildPybind11Extension
-
-setup(
-    name='dummy',
-    ext_modules=[
-        Pybind11Extension(
-            "dummy.spam",
-            sources=[
-                "spamextension.cpp",
-            ],
-            language="c++",
-        )
-    ],
-    cmdclass={
-        "build_ext": BuildPybind11Extension
-    },
-    )    
-    """)
-
-    pyproject = source_root / "pyproject.toml"
-    pyproject.write_text("""
-[project]
-name = "dummy"
-version = "1.0"
-    """)
-
-    conanfile = source_root / "conanfile.py"
-    conanfile.write_text("""
-from conan import ConanFile
-class Dummy(ConanFile):
-    requires = []
-    """)
-
-    myextension_cpp = source_root / "spamextension.cpp"
-    myextension_cpp.write_text("""#include <iostream>
-    #include <pybind11/pybind11.h>
-    PYBIND11_MODULE(spam, m){
-        m.doc() = R"pbdoc(Spam lovely spam)pbdoc";
-    }
-    """)
-
     output = tmp_path / "output"
-    with open(pyproject, "r", encoding="utf-8") as f:
-        print(f.read())
-    monkeypatch.chdir(source_root)
+    monkeypatch.chdir(pybind_only_example)
     monkeypatch.setenv("HOME", str(home))
     build.build_wheel(str(output))
     assert any(f.startswith("dummy") for f in os.listdir(output))
@@ -69,121 +30,43 @@ class Dummy(ConanFile):
 
 @pytest.fixture(scope="session")
 def zstd_example_config():
-    config_json =\
-        os.path.join(os.path.dirname(__file__), "conan_test_libraries.json")
-
-    with open(config_json, "r", encoding="utf-8") as f:
+    source_files_folder = os.path.join(
+        os.path.dirname(__file__), "test_files", "zstd_from_conan"
+    )
+    with open(
+        os.path.join(source_files_folder, "conan_test_libraries.json"),
+        "r",
+        encoding="utf-8",
+    ) as f:
         return json.load(f)["conan_test_libraries"]["2"]["zstd"]
+
+
+@pytest.fixture
+def zstd_from_conan_example(tmp_path, zstd_example_config):
+    source_root = tmp_path / "package"
+    source_root.mkdir()
+    pybind_only_source_folder = os.path.join(
+        os.path.dirname(__file__), "test_files", "zstd_from_conan"
+    )
+    shutil.copytree(pybind_only_source_folder, source_root, dirs_exist_ok=True)
+    return source_root
 
 
 @pytest.mark.skipif(
     sys.version_info < (3, 10) and sys.platform == "win32",
-    reason="There is an issue with module_from_spec on windows and Python 3.9"
+    reason="There is an issue with module_from_spec on windows and Python 3.9",
 )
 @pytest.mark.skipif(
-    version("conan") < "2.0.0",
-    reason="Requires Conan 2.0 or higher"
+    version("conan") < "2.0.0", reason="Requires Conan 2.0 or higher"
 )
 def test_conan_integration_with_shared_library(
     tmp_path,
     monkeypatch,
-    zstd_example_config
+    zstd_from_conan_example,
 ):
-    source_root = tmp_path / "package"
-    source_root.mkdir()
-
     home = tmp_path / "home"
-
-    setup_py = source_root / "setup.py"
-    setup_py.write_text("""
-from setuptools import setup
-import os
-from pybind11.setup_helpers import Pybind11Extension
-from uiucprescon.build.pybind11_builder import BuildPybind11Extension
-import importlib.util
-class BuildPybind11Extensions(BuildPybind11Extension):
-    def run(self):
-        conan_cmd = self.get_finalized_command("build_conan")
-        conan_cmd.run()
-        super().run()
-        module_path =\
-            os.path.join(
-                self.build_lib, 'dummy', self.get_ext_filename("spam")
-            )
-        module_name = 'dummy.spam'
-        spec = importlib.util.spec_from_file_location(module_name, module_path)
-        my_dynamic_module = importlib.util.module_from_spec(spec)
-        zstd_ver = my_dynamic_module.get_version()
-        assert zstd_ver == "1.5.7", \
-            f"version mismatch, expected: 1.5.7 got: {zstd_ver}"
-
-setup(
-    name='dummy',
-    ext_modules=[
-        Pybind11Extension(
-            "dummy.spam",
-            sources=[
-                "spamextension.cpp",
-            ],
-            language="c++",
-            libraries=["zstd"],
-        )
-    ],
-    cmdclass={
-        "build_ext": BuildPybind11Extensions
-    },
-    )    
-    """)
-
-    pyproject = source_root / "pyproject.toml"
-    requires = ",\n".join(
-        [
-            f'       "{r}"'
-            for r in zstd_example_config["requires"]
-        ]
-    )
-    default_options_string = str(
-        ",\n".join(
-            [
-                f'       "{k}": {v}'
-                for k, v in zstd_example_config["default_options"].items()
-             ]
-                   )
-    )
-    pyproject.write_text("""
-[project]
-name = "dummy"
-version = "1.0"
-    """)
-
-    conanfile = source_root / "conanfile.py"
-    conanfile.write_text(f"""
-from conan import ConanFile
-class Dummy(ConanFile):
-    requires = [
-{requires}
-    ]
-    default_options = {{
-{default_options_string}
-    }}
-""")
-
-    myextension_cpp = source_root / "spamextension.cpp"
-    myextension_cpp.write_text("""#include <iostream>
-    #include "zstd.h"
-    #include <pybind11/pybind11.h>
-    const std::string get_version(){
-        return ZSTD_versionString();
-    }
-    PYBIND11_MODULE(spam, m){
-        m.doc() = R"pbdoc(Spam lovely spam)pbdoc";
-        m.def("get_version", &get_version, "Get the version of lib linked to");
-    }
-    """)
-
     output = tmp_path / "output"
-    monkeypatch.chdir(source_root)
+    monkeypatch.chdir(zstd_from_conan_example)
     monkeypatch.setenv("HOME", str(home))
     build.build_wheel(str(output))
     assert any(f.startswith("dummy") for f in os.listdir(output))
-
