@@ -29,6 +29,29 @@ requires-python = ">=3.9"
 build_ext_info = "uiucprescon.build.introspection:BuildExtInfo"
 build_conan = "uiucprescon.build.conan_libs:BuildConan"
 
+[dependency-groups]
+test = [
+    "pytest",
+    "coverage",
+    "conan>=2.0"
+]
+dev = [
+    "bandit",
+    "flake8",
+    "lxml",
+    "mypy",
+    "pre-commit",
+    "pydocstyle",
+    {include-group = "test"},
+    "pylint",
+    "ruff",
+    "sphinx",
+    "tox",
+    "types-toml",
+    "types-pyyaml",
+]
+ci = ["pysonar", {include-group = "dev"}]
+
 ###############################################################################
 #                               TOOLS
 ###############################################################################
@@ -88,6 +111,10 @@ package-dir = {"" = "src"}
 
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { file = "requirements-dev.txt" }]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
 
 [tool.commitizen]
 name = "cz_conventional_commits"
