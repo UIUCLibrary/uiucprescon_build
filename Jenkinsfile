@@ -39,7 +39,6 @@ pipeline {
                             }
                             environment{
                                 PIP_CACHE_DIR='/tmp/pipcache'
-                                UV_INDEX_STRATEGY='unsafe-best-match'
                                 UV_TOOL_DIR='/tmp/uvtools'
                                 UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
@@ -325,7 +324,6 @@ pipeline {
                             }
                             environment{
                                 PIP_CACHE_DIR='/tmp/pipcache'
-                                UV_INDEX_STRATEGY='unsafe-best-match'
                                 UV_TOOL_DIR='/tmp/uvtools'
                                 UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
@@ -360,7 +358,6 @@ pipeline {
                                                         try{
                                                             withEnv([
                                                                 'PIP_CACHE_DIR=/tmp/pipcache',
-                                                                'UV_INDEX_STRATEGY=unsafe-best-match',
                                                                 'UV_TOOL_DIR=/tmp/uvtools',
                                                                 'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
                                                                 'UV_CACHE_DIR=/tmp/uvcache',
@@ -408,7 +405,6 @@ pipeline {
                                 expression {return nodesByLabel('windows && docker && x86').size() > 0}
                             }
                             environment{
-                                 UV_INDEX_STRATEGY='unsafe-best-match'
                                  PIP_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\pipcache'
                                  UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\uvtools'
                                  UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
@@ -499,9 +495,6 @@ pipeline {
                             when{
                                 expression {return nodesByLabel('mac && python3').size() > 0}
                             }
-                            environment{
-                                UV_INDEX_STRATEGY='unsafe-best-match'
-                            }
                             steps{
                                 script{
                                     node('mac && python3'){
@@ -525,9 +518,7 @@ pipeline {
                                                 {
                                                     node('mac && python3'){
                                                         checkout scm
-                                                        withEnv([
-                                                            'UV_INDEX_STRATEGY=unsafe-best-match',
-                                                        ]){
+                                                        withEnv(["UV_CONFIG_FILE=${createUnixUvConfig()}",]){
                                                             try{
                                                                 retry(3){
                                                                     try{
