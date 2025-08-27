@@ -80,7 +80,7 @@ pipeline {
                                                        bootstrap_uv/bin/pip install --disable-pip-version-check uv
                                                        bootstrap_uv/bin/uv venv  --python-preference=only-system  venv
                                                        . ./venv/bin/activate
-                                                       bootstrap_uv/bin/uv sync --locked --group dev --active
+                                                       bootstrap_uv/bin/uv sync --locked --group ci --active
                                                        bootstrap_uv/bin/uv pip install uv --python venv
                                                        rm -rf bootstrap_uv
                                                        uv pip list
@@ -277,6 +277,7 @@ pipeline {
                                             }
                                             environment{
                                                 VERSION="${readTOML( file: 'pyproject.toml')['project'].version}"
+                                                SONAR_USER_HOME='/tmp/sonar_cache'
                                             }
                                             when{
                                                 allOf{
@@ -296,10 +297,14 @@ pipeline {
                                             steps{
                                                 milestone ordinal: 1, label: 'sonarcloud'
                                                 withSonarQubeEnv(installationName: 'sonarcloud', credentialsId: params.SONARCLOUD_TOKEN) {
-                                                    sh(
-                                                        label: 'Running Sonar Scanner',
-                                                        script: "./venv/bin/uvx pysonar-scanner -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
-                                                    )
+                                                    withCredentials([string(credentialsId: params.SONARCLOUD_TOKEN, variable: 'token')]) {
+                                                        sh(
+                                                            label: 'Running Sonar Scanner',
+                                                            script: """. ./venv/bin/activate
+                                                                       pysonar -t \$token -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }
+                                                                    """,
+                                                        )
+                                                    }
                                                 }
                                                 script{
                                                     timeout(time: 1, unit: 'HOURS') {

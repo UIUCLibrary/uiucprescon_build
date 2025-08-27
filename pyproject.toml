@@ -50,6 +50,7 @@ dev = [
     "types-toml",
     "types-pyyaml",
 ]
+ci = ["pysonar", {include-group = "dev"}]
 
 ###############################################################################
 #                               TOOLS
