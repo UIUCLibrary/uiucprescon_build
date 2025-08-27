@@ -17,14 +17,13 @@ jobs:
           cache: 'pip' # caching pip dependencies
       - name: Install requirements
         run: |
-          pip install wheel
-          pip install tox -c requirements-dev.txt
+          pip install --disable-pip-version-check uv
       - name: Run tox
         if: "!contains(matrix.os, 'windows')"
-        run: tox -e py -vvv
+        run: uvx --with tox-uv tox run -e py -vvv
       - name: Run tox with MSVC
         if: contains(matrix.os, 'windows')
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          tox -e py
+          uvx --with tox-uv tox run -e py

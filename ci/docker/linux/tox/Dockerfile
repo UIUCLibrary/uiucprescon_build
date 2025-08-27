@@ -34,8 +34,6 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 ARG CONAN_DOWNLOAD_CACHE=/tmp/conan_download_cache
-ENV UV_CONSTRAINT=/tmp/requirements/requirements-dev.txt
-COPY requirements-dev.txt ${UV_CONSTRAINT}
 ARG CONAN_CENTER_PROXY_V2_URL
 ARG CONAN_HOME
 ARG PIP_DOWNLOAD_CACHE

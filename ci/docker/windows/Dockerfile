@@ -66,8 +66,6 @@ ARG UV_INDEX_URL
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
 ARG CONAN_HOME
-ENV UV_CONSTRAINT=c:/requirements/requirements-dev.txt
-COPY requirements-dev.txt ${UV_CONSTRAINT}
 COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
 COPY ci/docker/windows/conan/profile.ini ${CONAN_HOME}/profiles/default
 COPY tests/test_files/zstd_from_conan/conanfile.py c:/tests/test_files/zstd_from_conan/conanfile.py
