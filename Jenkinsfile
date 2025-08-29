@@ -60,7 +60,7 @@ pipeline {
                             agent {
                                 docker{
                                     image 'python'
-                                    label 'docker && linux'
+                                    label 'docker && linux && x86_64'
                                     args '--mount source=python-tmp-uiucprescon_build,target=/tmp'
                                 }
                             }
