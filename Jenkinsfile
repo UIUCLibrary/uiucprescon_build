@@ -1,7 +1,8 @@
-library identifier: 'JenkinsPythonHelperLibrary@2024.2.0', retriever: modernSCM(
+library identifier: 'JenkinsPythonHelperLibrary@2024.12.0', retriever: modernSCM(
   [$class: 'GitSCMSource',
    remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
    ])
+
 
 def get_sonarqube_unresolved_issues(report_task_file){
     script{
@@ -50,6 +51,8 @@ pipeline {
         booleanParam(name: 'TEST_RUN_TOX', defaultValue: false, description: 'Run Tox Tests')
         booleanParam(name: 'USE_SONARQUBE', defaultValue: true, description: 'Send data test data to SonarQube')
         credentials(name: 'SONARCLOUD_TOKEN', credentialType: 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl', defaultValue: 'sonarcloud_token', required: false)
+        booleanParam(name: 'BUILD_PACKAGES', defaultValue: false, description: 'Build Packages')
+        booleanParam(name: 'TEST_PACKAGES', defaultValue: false, description: 'Test Python packages by installing them and running tests on the installed package')
     }
     stages{
         stage('Building and Testing'){
@@ -444,7 +447,7 @@ pipeline {
                                  UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\uvtools'
                                  UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
                                  UV_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\uvcache'
-//                                 VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
+                                 //  VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
                             }
                             steps{
                                 script{
@@ -592,6 +595,197 @@ pipeline {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+        stage('Packaging'){
+            stages{
+                stage('Build Python Packages'){
+                    agent {
+                        docker{
+                            image 'python'
+                            label 'docker && linux'
+                            args '--mount source=python-tmp-uiucprescon_build,target=/tmp'
+                        }
+                    }
+                    when{
+                        equals expected: true, actual: params.BUILD_PACKAGES
+                    }
+                    environment{
+                        PIP_CACHE_DIR='/tmp/pipcache'
+                        UV_CACHE_DIR='/tmp/uvcache'
+                        UV_CONFIG_FILE=createUnixUvConfig()
+                    }
+                    options {
+                        timeout(5)
+                    }
+                    steps{
+                        sh(
+                            label: 'Package',
+                            script: '''python3 -m venv venv && venv/bin/pip install --disable-pip-version-check uv
+                                       trap "rm -rf venv" EXIT
+                                       . ./venv/bin/activate
+                                       uv build
+                                    '''
+                        )
+                        archiveArtifacts artifacts: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', fingerprint: true
+                        stash includes: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', name: 'PYTHON_PACKAGES'
+                    }
+                    post{
+                        cleanup{
+                            cleanWs(
+                                deleteDirs: true,
+                                patterns: [
+                                    [pattern: 'uv.toml', type: 'INCLUDE'],
+                                    [pattern: '**/__pycache__/', type: 'INCLUDE'],
+                                    [pattern: 'venv/', type: 'INCLUDE'],
+                                    [pattern: 'dist/', type: 'INCLUDE']
+                                    ]
+                                )
+                        }
+                    }
+                }
+                stage('Testing packages'){
+                    when{
+                        equals expected: true, actual: params.TEST_PACKAGES
+                    }
+                    environment{
+                        UV_CONSTRAINT='requirements-dev.txt'
+                    }
+                    steps{
+                        customMatrix(
+                            axes: [
+                                [
+                                    name: 'PYTHON_VERSION',
+                                    values: ['3.9', '3.10','3.11', '3.12','3.13']
+                                ],
+                                [
+                                    name: 'OS',
+                                    values: ['linux','macos','windows']
+                                ],
+                                [
+                                    name: 'ARCHITECTURE',
+                                    values: ['x86_64', 'arm64']
+                                ],
+                                [
+                                    name: 'PACKAGE_TYPE',
+                                    values: ['wheel', 'sdist'],
+                                ]
+                            ],
+                            excludes: [
+                                [
+                                    [
+                                        name: 'OS',
+                                        values: 'windows'
+                                    ],
+                                    [
+                                        name: 'ARCHITECTURE',
+                                        values: 'arm64',
+                                    ]
+                                ]
+                            ],
+                            when: {entry -> nodesByLabel("${entry.OS} && ${entry.ARCHITECTURE} ${['linux', 'windows'].contains(entry.OS) ? '&& docker': ''}").size() > 0},
+                            stages: [
+                                { entry ->
+                                    stage('Test Package') {
+                                        node("${entry.OS} && ${entry.ARCHITECTURE} ${['linux', 'windows'].contains(entry.OS) ? '&& docker': ''}"){
+                                            try{
+                                                checkout scm
+                                                unstash 'PYTHON_PACKAGES'
+                                                if(['linux', 'windows'].contains(entry.OS)){
+                                                    def image
+                                                    if(entry.OS == 'windows'){
+                                                        withEnv([
+                                                            'PIP_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\pipcache',
+                                                            'UV_TOOL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvtools',
+                                                            'UV_PYTHON_INSTALL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvpython',
+                                                            'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
+                                                        ]){
+                                                            lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                            }
+                                                            try{
+                                                                image.inside(
+                                                                    "--mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"
+                                                                  + " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR}"
+                                                                  + " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
+                                                                ){
+                                                                    powershell(
+                                                                        label: 'Testing with tox',
+                                                                        script: """uv python install cpython-${entry.PYTHON_VERSION}
+                                                                                   uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
+                                                                                   uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                """
+                                                                    )
+                                                                }
+                                                            } finally {
+                                                                if(image){
+                                                                    bat "docker rmi --no-prune ${image.id}"
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
+                                                        withEnv([
+                                                            'PIP_CACHE_DIR=/tmp/pipcache',
+                                                            'UV_TOOL_DIR=/tmp/uvtools',
+                                                            'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
+                                                            'UV_CACHE_DIR=/tmp/uvcache',
+                                                        ]){
+                                                            try{
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
+                                                                image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
+                                                                    sh(
+                                                                        label: 'Testing with tox',
+                                                                        script: """python3 -m venv venv
+                                                                                   ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                   ./venv/bin/uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
+                                                                                   ./venv/bin/uv python install cpython-${entry.PYTHON_VERSION}
+                                                                                   ./venv/bin/uvx --python-preference=only-system -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                """
+                                                                    )
+                                                                }
+                                                            } finally {
+                                                                if(image){
+                                                                    sh "docker rmi --no-prune ${image.id}"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    if(isUnix()){
+                                                        sh(
+                                                            label: 'Testing with tox',
+                                                            script: """python3 -m venv venv
+                                                                       ./venv/bin/pip install --disable-pip-version-check uv
+                                                                       ./venv/bin/uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
+                                                                       ./venv/bin/uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                    """
+                                                        )
+                                                    } else {
+                                                        bat(
+                                                            label: 'Testing with tox',
+                                                            script: """python -m venv venv
+                                                                       .\\venv\\Scripts\\pip install --disable-pip-version-check uv
+                                                                       .\\venv\\Scripts\\uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
+                                                                       .\\venv\\Scripts\\uv python install cpython-${entry.PYTHON_VERSION}
+                                                                       .\\venv\\Scripts\\uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                    """
+                                                        )
+                                                    }
+                                                }
+                                            } finally{
+                                                if(isUnix()){
+                                                    sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                                } else {
+                                                    bat "${tool(name: 'Default', type: 'git')} clean -dfx"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        )
                     }
                 }
             }
