@@ -691,9 +691,7 @@ pipeline {
                                                                 ){
                                                                     powershell(
                                                                         label: 'Testing with tox',
-                                                                        script: """uv python update-shell
-                                                                                   set PATH="C:\\Users\\ContainerAdministrator\\.local\\bin;%PATH%"
-                                                                                   uv python install cpython-${entry.PYTHON_VERSION}
+                                                                        script: """uv python install cpython-${entry.PYTHON_VERSION}
                                                                                    uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
                                                                                    uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                                 """
