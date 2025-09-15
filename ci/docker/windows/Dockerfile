@@ -60,6 +60,8 @@ RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
     $env:Path = [System.Environment]::GetEnvironmentVariable(\"Path\",\"Machine\") + \";\" + [System.Environment]::GetEnvironmentVariable(\"Path\",\"User\") ; `
     c:/verifyenv.ps1
 
+RUN uv python update-shell
+
 FROM BASE_BUILDER AS CONAN_BUILDER
 ARG UV_EXTRA_INDEX_URL
 ARG UV_INDEX_URL
