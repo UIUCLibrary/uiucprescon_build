@@ -368,7 +368,7 @@ pipeline {
                                                 {
                                                     node('docker && linux'){
                                                         checkout scm
-                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
+                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
                                                         try{
                                                             withEnv([
                                                                 'PIP_CACHE_DIR=/tmp/pipcache',
@@ -464,7 +464,7 @@ pipeline {
                                                             checkout scm
                                                             def image
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
                                                             }
                                                             try{
                                                                 try{
@@ -681,7 +681,7 @@ pipeline {
                                                             'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
                                                         ]){
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
                                                             }
                                                             try{
                                                                 image.inside(
@@ -691,7 +691,9 @@ pipeline {
                                                                 ){
                                                                     powershell(
                                                                         label: 'Testing with tox',
-                                                                        script: """uv python install cpython-${entry.PYTHON_VERSION}
+                                                                        script: """uv python update-shell
+                                                                                   set PATH="C:\\Users\\ContainerAdministrator\\.local\\bin;%PATH%"
+                                                                                   uv python install cpython-${entry.PYTHON_VERSION}
                                                                                    uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
                                                                                    uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                                 """
@@ -711,7 +713,7 @@ pipeline {
                                                             'UV_CACHE_DIR=/tmp/uvcache',
                                                         ]){
                                                             try{
-                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR .')
+                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
                                                                 image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
                                                                     sh(
                                                                         label: 'Testing with tox',
