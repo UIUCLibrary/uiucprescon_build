@@ -280,6 +280,7 @@ pipeline {
                                                         return true
                                                     }
                                                 }
+                                                beforeOptions true
                                             }
                                             steps{
                                                 milestone ordinal: 1, label: 'sonarcloud'
