@@ -35,6 +35,10 @@ test = [
     "coverage",
     "conan>=2.0"
 ]
+tox = [
+    "tox"
+]
+
 dev = [
     "bandit",
     "flake8",
@@ -43,10 +47,10 @@ dev = [
     "pre-commit",
     "pydocstyle",
     {include-group = "test"},
+    {include-group = "tox"},
     "pylint",
     "ruff",
     "sphinx",
-    "tox",
     "types-toml",
     "types-pyyaml",
 ]

@@ -339,6 +339,8 @@ pipeline {
                                 UV_TOOL_DIR='/tmp/uvtools'
                                 UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
+                                UV_PROJECT_ENVIRONMENT='./venv'
+                                UV_PYTHON_PREFERENCE='only-system'
                             }
                             steps{
                                 script{
@@ -384,8 +386,9 @@ pipeline {
                                                                             try{
                                                                                 sh( label: 'Running Tox',
                                                                                     script: """python3 -m venv venv --clear
-                                                                                                ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                               ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
+                                                                                               ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                               ./venv/bin/uv sync --frozen --only-group tox
+                                                                                               ./venv/bin/uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                             """
                                                                                     )
                                                                             } catch(e) {
@@ -425,6 +428,7 @@ pipeline {
                                  UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\uvtools'
                                  UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
                                  UV_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\uvcache'
+                                 UV_PROJECT_ENVIRONMENT='.\\venv'
                                  //  VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
                             }
                             steps{
@@ -477,9 +481,10 @@ pipeline {
                                                                          ){
                                                                             retry(3){
                                                                                 try{
-                                                                                    powershell(label: 'Running Tox',
+                                                                                    bat(label: 'Running Tox',
                                                                                         script: """uv python install cpython-${version}
-                                                                                                   uvx -p ${version} --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv
+                                                                                                   uv sync --frozen --only-group tox
+                                                                                                   uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv
                                                                                             """
                                                                                     )
                                                                                 } catch(e) {
@@ -515,6 +520,10 @@ pipeline {
                             when{
                                 expression {return nodesByLabel('mac && python3').size() > 0}
                             }
+                            environment{
+                                UV_PROJECT_ENVIRONMENT='./venv'
+                                UV_PYTHON_PREFERENCE='only-system'
+                            }
                             steps{
                                 script{
                                     node('mac && python3'){
@@ -546,7 +555,8 @@ pipeline {
                                                                     try{
                                                                         sh( label: 'Running Tox',
                                                                             script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                       ./venv/bin/uvx -p ${version} --python-preference only-system --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
+                                                                                        ./venv/bin/uv sync --frozen --only-group tox
+                                                                                        ./venv/bin/uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                     """
                                                                         )
                                                                     } catch(e) {
