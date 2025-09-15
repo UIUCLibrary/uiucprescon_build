@@ -53,6 +53,7 @@ pipeline {
         credentials(name: 'SONARCLOUD_TOKEN', credentialType: 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl', defaultValue: 'sonarcloud_token', required: false)
         booleanParam(name: 'BUILD_PACKAGES', defaultValue: false, description: 'Build Packages')
         booleanParam(name: 'TEST_PACKAGES', defaultValue: false, description: 'Test Python packages by installing them and running tests on the installed package')
+        booleanParam(name: 'DEPLOY_GITHUB_RELEASE', defaultValue: false, description: 'Deploy to Github Release. Requires the current commit to be tagged. Note: This is experimental')
     }
     stages{
         stage('Building and Testing'){
@@ -762,6 +763,79 @@ pipeline {
                                 }
                             ]
                         )
+                    }
+                }
+            }
+        }
+        stage('GitHub Release'){
+            agent any
+            when{
+                beforeInput true
+                beforeAgent true
+                beforeOptions true
+                allOf{
+                  equals expected: true, actual: params.BUILD_PACKAGES
+                  equals expected: true, actual: params.DEPLOY_GITHUB_RELEASE
+                  tag '*'
+                }
+            }
+            input {
+                message 'Create GitHub Release'
+                id 'GITHUB_DEPLOYMENT'
+                parameters {
+                    credentials(
+                        credentialType: 'org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl',
+                        description: 'GitHub credential Id',
+                        name: 'GITHUB_CREDENTIALS_ID',
+                        required: true
+                    )
+                }
+            }
+            environment{
+                GITHUB_REPO='UIUCLibrary/uiucprescon_build'
+            }
+            options{
+                lock("${env.JOB_NAME}")
+                // This has to be do "checkout scm" anyways to get the hash so there is no reason the check it out twice
+                skipDefaultCheckout true
+            }
+            steps{
+                unstash 'PYTHON_PACKAGES'
+                script {
+                    def scmVars = checkout scm
+                    def projectMetadata = readTOML( file: 'pyproject.toml')['project']
+                    writeFile(
+                        file: 'body.md',
+                        text: "${projectMetadata.name} Version ${projectMetadata.version} Release"
+
+                    )
+                    createGitHubRelease(
+                        credentialId: "${GITHUB_CREDENTIALS_ID}",
+                        repository: env.GITHUB_REPO,
+                        tag: env.BRANCH_NAME,
+                        commitish: scmVars.GIT_COMMIT,
+                        bodyFile: 'body.md',
+                    )
+                    def assets = []
+                    findFiles(glob: 'dist/*').each{
+                        assets << [filePath: "${it.path}"]
+                    }
+                    uploadGithubReleaseAsset(
+                        credentialId: "${GITHUB_CREDENTIALS_ID}",
+                        repository: env.GITHUB_REPO,
+                        tagName: env.BRANCH_NAME,
+                        uploadAssets: assets
+                    )
+                }
+            }
+            post{
+                cleanup{
+                    script{
+                        if(isUnix()){
+                            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+                        } else {
+                            bat "${tool(name: 'Default', type: 'git')} clean -dfx"
+                        }
                     }
                 }
             }
