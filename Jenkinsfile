@@ -72,6 +72,7 @@ pipeline {
                                 UV_TOOL_DIR='/tmp/uvtools'
                                 UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
+                                UV_PROJECT_ENVIRONMENT='./venv'
                                 UV_CONFIG_FILE=createUnixUvConfig()
                             }
                             stages{
@@ -86,12 +87,9 @@ pipeline {
                                             script: '''python3 -m venv --clear bootstrap_uv
                                                        trap "rm -rf bootstrap_uv" EXIT
                                                        bootstrap_uv/bin/pip install --disable-pip-version-check uv
-                                                       bootstrap_uv/bin/uv venv  --python-preference=only-system  venv
-                                                       . ./venv/bin/activate
-                                                       bootstrap_uv/bin/uv sync --locked --group ci --active
-                                                       bootstrap_uv/bin/uv pip install uv --python venv
-                                                       rm -rf bootstrap_uv
-                                                       uv pip list
+                                                       bootstrap_uv/bin/uv venv  --python-preference=only-system
+                                                       bootstrap_uv/bin/uv sync --frozen --group ci
+                                                       bootstrap_uv/bin/uv pip install uv --python $UV_PROJECT_ENVIRONMENT
                                                        '''
                                                    )
                                         sh '''mkdir -p reports
@@ -106,6 +104,7 @@ pipeline {
                                                 patterns: [
                                                     [pattern: 'logs/', type: 'INCLUDE'],
                                                     [pattern: 'reports/', type: 'INCLUDE'],
+                                                    [pattern: 'bootstrap_uv/', type: 'INCLUDE'],
                                                     [pattern: 'venv/', type: 'INCLUDE'],
                                                 ]
                                             )
@@ -114,9 +113,7 @@ pipeline {
                                 }
                                 stage('Building Docs'){
                                     steps{
-                                        sh '''. ./venv/bin/activate
-                                              sphinx-build docs build/docs/html -b html -d build/docs/.doctrees -v -w logs/build_sphinx_html.log -W --keep-going
-                                           '''
+                                        sh './venv/bin/uv run sphinx-build docs build/docs/html -b html -d build/docs/.doctrees -v -w logs/build_sphinx_html.log -W --keep-going'
                                     }
                                     post{
                                         always{
@@ -139,11 +136,8 @@ pipeline {
                                                     steps{
                                                         catchError(buildResult: 'SUCCESS', message: 'Bandit found some issues', stageResult: 'UNSTABLE') {
                                                             sh(
-                                                                label: 'Run pydocstyle',
-                                                                script: '''. ./venv/bin/activate
-                                                                           mkdir -p reports/bandit
-                                                                           bandit -c pyproject.toml --recursive src -f html -o reports/bandit/report.html
-                                                                        '''
+                                                                label: 'Run bandit',
+                                                                script: 'mkdir -p reports/bandit && ./venv/bin/uv run bandit -c pyproject.toml --recursive src -f html -o reports/bandit/report.html'
                                                             )
                                                         }
                                                     }
@@ -158,9 +152,7 @@ pipeline {
                                                         catchError(buildResult: 'SUCCESS', message: 'Did not pass all pyDocStyle tests', stageResult: 'UNSTABLE') {
                                                             sh(
                                                                 label: 'Run pydocstyle',
-                                                                script: '''. ./venv/bin/activate
-                                                                           pydocstyle src > reports/pydocstyle-report.txt
-                                                                        '''
+                                                                script: './venv/bin/uv run pydocstyle src > reports/pydocstyle-report.txt'
                                                             )
                                                         }
                                                     }
@@ -178,18 +170,13 @@ pipeline {
                                                         catchError(buildResult: 'UNSTABLE', message: 'Did not pass all pytest tests', stageResult: 'UNSTABLE') {
                                                             sh(
                                                                 label: 'Running Pytest',
-                                                                script:'''. ./venv/bin/activate
-                                                                          coverage run --parallel-mode --source=src -m pytest --junitxml=reports/pytest.xml
-                                                                          '''
+                                                                script:'./venv/bin/uv run coverage run --parallel-mode --source=src -m pytest --junitxml=reports/pytest.xml'
                                                            )
                                                        }
                                                     }
                                                     post {
                                                         always {
                                                             junit 'reports/pytest.xml'
-                                                        }
-                                                        failure{
-                                                            sh('pip list')
                                                         }
                                                     }
                                                 }
@@ -198,9 +185,7 @@ pipeline {
                                                         withEnv(['PYLINTHOME=/tmp/.cache/pylint']) {
                                                             catchError(buildResult: 'SUCCESS', message: 'Pylint found issues', stageResult: 'UNSTABLE') {
                                                                 sh(label: 'Running pylint',
-                                                                    script: '''. ./venv/bin/activate
-                                                                               pylint src -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt
-                                                                            '''
+                                                                    script: './venv/bin/uv run pylint src -r n --msg-template="{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}" > reports/pylint.txt'
                                                                 )
                                                             }
                                                         }
@@ -217,10 +202,9 @@ pipeline {
                                                         catchError(buildResult: 'SUCCESS', message: 'Ruff found issues', stageResult: 'UNSTABLE') {
                                                             sh(
                                                              label: 'Running Ruff',
-                                                             script: '''. ./venv/bin/activate
-                                                                        ruff check --config=pyproject.toml -o reports/ruffoutput.txt --output-format pylint --exit-zero
-                                                                        ruff check --config=pyproject.toml -o reports/ruffoutput.json --output-format json
-                                                                    '''
+                                                             script: '''./venv/bin/uv run ruff check --config=pyproject.toml -o reports/ruffoutput.txt --output-format pylint --exit-zero
+                                                                        ./venv/bin/uv run ruff check --config=pyproject.toml -o reports/ruffoutput.json --output-format json
+                                                                     '''
                                                              )
                                                         }
                                                     }
@@ -234,15 +218,12 @@ pipeline {
                                                     steps{
                                                         catchError(buildResult: 'SUCCESS', message: 'flake8 found some warnings', stageResult: 'UNSTABLE') {
                                                             sh(label: 'Running flake8',
-                                                               script: '''. ./venv/bin/activate
-                                                                          flake8 src --tee --output-file=logs/flake8.log
-                                                                       '''
+                                                               script: './venv/bin/uv run flake8 src --tee --output-file=logs/flake8.log'
                                                             )
                                                         }
                                                     }
                                                     post {
                                                         always {
-                                                            stash includes: 'logs/flake8.log', name: 'FLAKE8_REPORT'
                                                             recordIssues(tools: [flake8(name: 'Flake8', pattern: 'logs/flake8.log')])
                                                         }
                                                     }
@@ -252,9 +233,7 @@ pipeline {
                                                         catchError(buildResult: 'SUCCESS', message: 'MyPy found issues', stageResult: 'UNSTABLE') {
                                                             sh(
                                                                 label: 'Running Mypy',
-                                                                script: '''. ./venv/bin/activate
-                                                                           mypy -p uiucprescon --html-report reports/mypy/html > logs/mypy.log
-                                                                           '''
+                                                                script: './venv/bin/uv run mypy -p uiucprescon --html-report reports/mypy/html > logs/mypy.log'
                                                            )
                                                         }
                                                     }
@@ -269,10 +248,9 @@ pipeline {
                                             post{
                                                 always{
                                                     sh(label: 'combining coverage data',
-                                                       script: '''. ./venv/bin/activate
-                                                                  coverage combine
-                                                                  coverage xml -o ./reports/coverage-python.xml
-                                                                  '''
+                                                       script: '''./venv/bin/uv run coverage combine
+                                                                  ./venv/bin/uv run coverage xml -o ./reports/coverage-python.xml
+                                                               '''
                                                     )
                                                     archiveArtifacts allowEmptyArchive: true, artifacts: 'reports/coverage-python.xml'
                                                     recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'reports/coverage-python.xml']])
@@ -308,9 +286,7 @@ pipeline {
                                                     withCredentials([string(credentialsId: params.SONARCLOUD_TOKEN, variable: 'token')]) {
                                                         sh(
                                                             label: 'Running Sonar Scanner',
-                                                            script: """. ./venv/bin/activate
-                                                                       pysonar -t \$token -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }
-                                                                    """,
+                                                            script: "./venv/bin/uv run pysonar -t \$token -Dsonar.projectVersion=${env.VERSION} -Dsonar.python.xunit.reportPath=./reports/pytest.xml -Dsonar.python.pylint.reportPaths=reports/pylint.txt -Dsonar.python.ruff.reportPaths=./reports/ruffoutput.json -Dsonar.python.coverage.reportPaths=./reports/coverage-python.xml -Dsonar.python.mypy.reportPaths=./logs/mypy.log ${env.CHANGE_ID ? '-Dsonar.pullrequest.key=$CHANGE_ID -Dsonar.pullrequest.base=$BRANCH_NAME' : '-Dsonar.branch.name=$BRANCH_NAME' }",
                                                         )
                                                     }
                                                 }
