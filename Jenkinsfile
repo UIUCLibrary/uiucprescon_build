@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 library identifier: 'JenkinsPythonHelperLibrary@2024.12.0', retriever: modernSCM(
   [$class: 'GitSCMSource',
    remote: 'https://github.com/UIUCLibrary/JenkinsPythonHelperLibrary.git',
@@ -409,7 +411,9 @@ pipeline {
                                                                 }
                                                             }
                                                         } finally {
-                                                            sh "docker rmi --no-prune ${image.id}"
+                                                            if(image){
+                                                                sh "docker rmi --no-prune ${image.id}"
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -505,7 +509,9 @@ pipeline {
                                                                     bat "${tool(name: 'Default', type: 'git')} clean -dfx"
                                                                 }
                                                             } finally{
-                                                                bat "docker rmi --no-prune ${image.id}"
+                                                                if(image){
+                                                                    bat "docker rmi --no-prune ${image.id}"
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -699,13 +705,15 @@ pipeline {
                                                                   + " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR}"
                                                                   + " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
                                                                 ){
-                                                                    powershell(
-                                                                        label: 'Testing with tox',
-                                                                        script: """uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                   uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
-                                                                                   uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                                """
-                                                                    )
+                                                                    withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
+                                                                        powershell(
+                                                                            label: 'Testing with tox',
+                                                                            script: """uv python install cpython-${entry.PYTHON_VERSION}
+                                                                                       uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
+                                                                                       uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                    """
+                                                                        )
+                                                                    }
                                                                 }
                                                             } finally {
                                                                 if(image){
@@ -807,36 +815,45 @@ pipeline {
             }
             options{
                 lock("${env.JOB_NAME}")
-                // This has to be do "checkout scm" anyways to get the hash so there is no reason the check it out twice
-                skipDefaultCheckout true
             }
             steps{
-                unstash 'PYTHON_PACKAGES'
                 script {
-                    def scmVars = checkout scm
                     def projectMetadata = readTOML( file: 'pyproject.toml')['project']
-                    writeFile(
-                        file: 'body.md',
-                        text: "${projectMetadata.name} Version ${projectMetadata.version} Release"
-
-                    )
-                    createGitHubRelease(
-                        credentialId: "${GITHUB_CREDENTIALS_ID}",
-                        repository: env.GITHUB_REPO,
-                        tag: env.BRANCH_NAME,
-                        commitish: scmVars.GIT_COMMIT,
-                        bodyFile: 'body.md',
-                    )
-                    def assets = []
-                    findFiles(glob: 'dist/*').each{
-                        assets << [filePath: "${it.path}"]
+                    withCredentials([string(credentialsId: GITHUB_CREDENTIALS_ID, variable: 'GITHUB_TOKEN')]) {
+                        def requestBody = JsonOutput.toJson([
+                            tag_name: env.BRANCH_NAME,
+                            name: "Version ${projectMetadata.version}",
+                            generate_release_notes: false,
+                            draft: false,
+                            prerelease: false
+                        ])
+                        def createReleaseResponse = httpRequest(
+                            httpMode: 'POST',
+                            contentType: 'APPLICATION_JSON',
+                            url: "https://api.github.com/repos/UIUCLibrary/uiucprescon_build/releases",
+                            customHeaders: [
+                                [name: 'Authorization', value: "token ${GITHUB_TOKEN}"]
+                            ],
+                            requestBody: requestBody,
+                            validResponseCodes: '201' // Expect a 201 Created status code
+                            )
+                        unstash 'PYTHON_PACKAGES'
+                        def releaseData = readJSON text: createReleaseResponse.content
+                        findFiles(glob: 'dist/*').each{
+                            def uploadResponse = httpRequest(
+                                url: "${releaseData.upload_url.replace('{?name,label}', '')}?name=${it.name}",
+                                httpMode: 'POST',
+                                uploadFile: it.path,
+                                customHeaders: [[name: 'Authorization', value: "token ${GITHUB_TOKEN}"]],
+                                wrapAsMultipart: false
+                            )
+                            if (uploadResponse.status >= 200 && uploadResponse.status < 300) {
+                                echo "File uploaded successfully to GitHub release."
+                            } else {
+                                error "Failed to upload file: ${uploadResponse.status} - ${uploadResponse.content}"
+                            }
+                        }
                     }
-                    uploadGithubReleaseAsset(
-                        credentialId: "${GITHUB_CREDENTIALS_ID}",
-                        repository: env.GITHUB_REPO,
-                        tagName: env.BRANCH_NAME,
-                        uploadAssets: assets
-                    )
                 }
             }
             post{

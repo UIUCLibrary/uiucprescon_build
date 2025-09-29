@@ -1,3 +1,31 @@
+## v0.4.0 (2025-09-29)
+
+### Fix
+
+- workaround for building python extensions with runtime_library_dirs on windows
+
+### Refactor
+
+- use actual src file for tests. fixes missing json file on windows
+- use actual src file for tests. fixes sonar from thinking it needs to check cpp code
+- use actual src file for tests. fixes missing json file
+- use actual src file for tests
+
+## v0.3.0 (2025-09-29)
+
+### Fix
+
+- workaround for building python extensions with runtime_library_dirs on windows
+
+### Refactor
+
+- use actual src file for tests. fixes missing json file on windows
+- use actual src file for tests. fixes sonar from thinking it needs to check cpp code
+- use actual src file for tests. fixes missing json file
+- use actual src file for tests
+
+## v0.2.9 (2025-08-08)
+
 ## v0.2.7 (2025-08-04)
 
 ### Feat
