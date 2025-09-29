@@ -3,6 +3,7 @@
 from __future__ import annotations
 import functools
 import io
+import logging
 import os
 import platform
 import re
@@ -430,7 +431,7 @@ class BuildConan(setuptools.Command):
         """Build dependencies with Conan and update extensions."""
         build_ext = cast(BuildExt, self.get_finalized_command("build_ext"))
         if self.install_libs:
-            if build_ext._inplace:
+            if build_ext.inplace:
                 install_dir = os.path.abspath(build_ext.build_temp)
             else:
                 build_py = cast(
@@ -479,10 +480,18 @@ class BuildConan(setuptools.Command):
         build_ext_cmd = cast(BuildExt, self.get_finalized_command("build_ext"))
         extensions = []
         for extension in build_ext_cmd.extensions:
-            if build_ext._inplace:
-                extension.runtime_library_dirs.append(
-                    os.path.abspath(install_dir)
-                )
+            if build_ext.inplace:
+                if platform.system() == "Windows":
+                    self.announce(
+                        f"You might need to append "
+                        f"{os.path.abspath(install_dir)} to your path to run "
+                        f"this extension as editable",
+                        level=logging.WARNING
+                    )
+                else:
+                    extension.runtime_library_dirs.append(
+                        os.path.abspath(install_dir)
+                    )
             update_extension3(
                 extension,
                 strategy=(
