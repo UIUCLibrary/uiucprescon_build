@@ -388,9 +388,8 @@ pipeline {
                                                                             try{
                                                                                 sh( label: 'Running Tox',
                                                                                     script: """python3 -m venv venv --clear
-                                                                                               ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                               ./venv/bin/uv sync --frozen --only-group tox
-                                                                                               ./venv/bin/uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
+                                                                                               uv sync --frozen --only-group tox
+                                                                                               uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                             """
                                                                                     )
                                                                             } catch(e) {

@@ -1,4 +1,3 @@
-
 ARG UV_CACHE_DIR=/.cache/uv
 # UV Cache directory. Change this only if you need to override the default location.
 
@@ -10,6 +9,8 @@ ARG CONAN_USER_HOME=/conan
 ARG CONAN_HOME=${CONAN_USER_HOME}/.conan2
 ARG PIPX_HOME=/pipx
 ARG PIP_DOWNLOAD_CACHE=/.cache/pip
+
+FROM ghcr.io/astral-sh/uv:latest AS uv_builder
 FROM ubuntu:22.04 AS base
 COPY ci/docker/linux/tox/apt-packages.txt /tmp/
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
@@ -23,6 +24,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
      < /tmp/apt-packages.txt xargs apt-get install -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+COPY --from=uv_builder /uv /uvx /bin/
 
 FROM base AS conan_builder
 ARG CONAN_USER_HOME
@@ -44,22 +46,19 @@ COPY ci/docker/linux/tox/conan/profile.ini ${CONAN_HOME}/profiles/default
 RUN --mount=type=cache,target=${PIP_DOWNLOAD_CACHE},sharing=locked \
     --mount=type=cache,target=${UV_CACHE_DIR},sharing=locked \
     --mount=type=cache,target=${CONAN_DOWNLOAD_CACHE} \
-    python3 -m venv venv && \
-    ./venv/bin/pip --disable-pip-version-check install uv && \
-    ./venv/bin/uvx --with cmake conan profile detect --exist-ok &&  \
+    uvx --with cmake conan profile detect --exist-ok &&  \
     cp ${CONAN_HOME}/global.conf /tmp/global.conf.original && \
     echo "core.sources:download_cache = $CONAN_DOWNLOAD_CACHE" >> ${CONAN_HOME}/global.conf && \
     if [ "$(jq -r '.remotes[0].url' ${CONAN_HOME}/remotes.json )" != "${CONAN_CENTER_PROXY_V2_URL}" ]; then \
         echo "Setting the conan center url for building cache: ${CONAN_CENTER_PROXY_V2_URL}" && \
         cp ${CONAN_HOME}/remotes.json /tmp/remotes.json && \
-        ./venv/bin/uvx --with cmake conan remote update conan-center --url ${CONAN_CENTER_PROXY_V2_URL}; \
+        uvx --with cmake conan remote update conan-center --url ${CONAN_CENTER_PROXY_V2_URL}; \
     fi && \
-    ./venv/bin/uvx --with cmake conan install /tests/test_files/zstd_from_conan/conanfile.py --build=missing -pr:b=default && \
-    ./venv/bin/uvx --with cmake conan cache clean "*" -b --source --build --temp && \
+    uvx --with cmake conan install /tests/test_files/zstd_from_conan/conanfile.py --build=missing -pr:b=default && \
+    uvx --with cmake conan cache clean "*" -b --source --build --temp && \
     if [ "$(jq -r '.remotes[0].url' ${CONAN_HOME}/remotes.json )" != "${CONAN_CENTER_PROXY_V2_URL}" ]; then \
       mv -f /tmp/remotes.json ${CONAN_HOME}/remotes.json; \
     fi && \
-    rm -rf venv && \
     mv -f /tmp/global.conf.original ${CONAN_HOME}/global.conf
 
 FROM base
