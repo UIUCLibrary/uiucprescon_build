@@ -473,7 +473,13 @@ pipeline {
                                                             def image
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
                                                                 timeout(120){
-                                                                    image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                    def imageName = UUID.randomUUID().toString()
+                                                                    try{
+                                                                        image = docker.build(imageName, '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                    } catch(e){
+                                                                        bat(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
+                                                                        throw e
+                                                                    }
                                                                 }
                                                             }
                                                             try{
@@ -656,7 +662,7 @@ pipeline {
                             axes: [
                                 [
                                     name: 'PYTHON_VERSION',
-                                    values: ['3.9', '3.10','3.11', '3.12','3.13']
+                                    values: ['3.10','3.11', '3.12','3.13']
                                 ],
                                 [
                                     name: 'OS',
@@ -693,6 +699,7 @@ pipeline {
                                                 unstash 'PYTHON_PACKAGES'
                                                 if(['linux', 'windows'].contains(entry.OS)){
                                                     def image
+
                                                     if(entry.OS == 'windows'){
                                                         withEnv([
                                                             'PIP_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\pipcache',
@@ -701,7 +708,13 @@ pipeline {
                                                             'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
                                                         ]){
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                def image_name = UUID.randomUUID().toString()
+                                                                try{
+                                                                    image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                } catch(e){
+                                                                    bat(returnStatus: true, script: "docker rmi --no-prune ${image_name}")
+                                                                    throw e
+                                                                }
                                                             }
                                                             try{
                                                                 image.inside(
@@ -720,9 +733,7 @@ pipeline {
                                                                     }
                                                                 }
                                                             } finally {
-                                                                if(image){
-                                                                    bat "docker rmi --no-prune ${image.id}"
-                                                                }
+                                                                bat "docker rmi --no-prune ${image.id}"
                                                             }
                                                         }
                                                     } else {
@@ -732,8 +743,14 @@ pipeline {
                                                             'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
                                                             'UV_CACHE_DIR=/tmp/uvcache',
                                                         ]){
+                                                            def imageName = UUID.randomUUID().toString()
                                                             try{
-                                                                image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                                image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                            } catch (e){
+                                                                sh(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
+                                                                throw e
+                                                            }
+                                                            try{
                                                                 image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
                                                                     sh(
                                                                         label: 'Testing with tox',

@@ -23,7 +23,7 @@ dependencies = [
 ]
 readme = "README.md"
 license = "NCSA"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 [project.entry-points."distutils.commands"]
 build_ext_info = "uiucprescon.build.introspection:BuildExtInfo"

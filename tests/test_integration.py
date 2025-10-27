@@ -40,10 +40,6 @@ def zstd_from_conan_example(tmp_path):
 
 
 @pytest.mark.skipif(
-    sys.version_info < (3, 10) and sys.platform == "win32",
-    reason="There is an issue with module_from_spec on windows and Python 3.9",
-)
-@pytest.mark.skipif(
     version("conan") < "2.0.0", reason="Requires Conan 2.0 or higher"
 )
 def test_conan_integration_with_shared_library(
