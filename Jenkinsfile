@@ -347,6 +347,7 @@ pipeline {
                             steps{
                                 script{
                                     def envs = []
+                                    def retryTimes = 3
                                     node('docker && linux'){
                                         try{
                                             checkout scm
@@ -372,7 +373,16 @@ pipeline {
                                                 {
                                                     node('docker && linux'){
                                                         checkout scm
-                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                        def imageName = UUID.randomUUID().toString()
+                                                        def image
+                                                        retry(retryTimes){
+                                                            try{
+                                                                image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                            } catch (e){
+                                                                sh(label: 'untagging docker image', script: "docker rmi {imageName} --no-prune", returnStatus: true)
+                                                                throw e
+                                                            }
+                                                        }
                                                         try{
                                                             withEnv([
                                                                 'PIP_CACHE_DIR=/tmp/pipcache',
@@ -384,7 +394,7 @@ pipeline {
                                                             ]){
                                                                 try{
                                                                     image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
-                                                                        retry(3){
+                                                                        retry(retryTimes){
                                                                             try{
                                                                                 sh( label: 'Running Tox',
                                                                                     script: """python3 -m venv venv --clear
