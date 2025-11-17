@@ -249,14 +249,12 @@ def get_win_deps(
             file=sys.stderr,
         )
 
-    compiler.spawn(
-        [
-            dumpbin_exe,
-            "/dependents",
-            dll_name,
-            f"/out:{output_file}",
-        ]
-    )
+    compiler.spawn([
+        dumpbin_exe,
+        "/dependents",
+        dll_name,
+        f"/out:{output_file}",
+    ])
     deps = parse_dumpbin_deps(file=output_file)
     deps = remove_system_dlls(deps)
     return deps
@@ -423,18 +421,16 @@ def iter_otool_lib_dependencies(
     regex = (
         r"^(?P<path>([@a-zA-Z./0-9-_+])+)"
         r"/"
-        r"(?P<file>lib[a-zA-Z/.0-9+-]+\.dylib)"
+        r"(?P<file>lib[a-zA-Z/.0-9+-_]+\.(dylib|so))"
     )
     dylib_regex = re.compile(regex)
     for line in otool_get_shared_libs_strategy(library).split("\n"):
-        if any(
-            [
-                not line.strip(),  # it's an empty line
-                str(library) in line,  # it's the same library
-                "/usr/lib/" in line,  # it's a system library
-                "/System/" in line,  # it's a system library
-            ]
-        ):
+        if any([
+            not line.strip(),  # it's an empty line
+            str(library) in line,  # it's the same library
+            "/usr/lib/" in line,  # it's a system library
+            "/System/" in line,  # it's a system library
+        ]):
             continue
         value = dylib_regex.match(line.strip())
         if value:
