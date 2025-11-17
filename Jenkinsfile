@@ -738,6 +738,7 @@ pipeline {
                                                             'UV_TOOL_DIR=/tmp/uvtools',
                                                             'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
                                                             'UV_CACHE_DIR=/tmp/uvcache',
+                                                            'UV_PYTHON_PREFERENCE=only-system'
                                                         ]){
                                                             def imageName = UUID.randomUUID().toString()
                                                             try{
