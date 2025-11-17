@@ -1,3 +1,13 @@
+## v0.4.1 (2025-11-17)
+
+### Feat
+
+- BuildPybind11Extension gained extra linking_library_search_paths option
+
+### Fix
+
+- iter_otool_lib_dependencies can handle shared libraries that use the .so extension
+
 ## v0.4.0 (2025-09-29)
 
 ### Fix
