@@ -34,12 +34,9 @@ class AbsFindLibrary(abc.ABC):
 
 def find_linking_libraries_with_conanbuildinfo_txt(conanbuildinfo):
     if not os.path.exists(conanbuildinfo):
-        raise FileNotFoundError(
-            f"Missing required file {conanbuildinfo}"
-        )
+        raise FileNotFoundError(f"Missing required file {conanbuildinfo}")
     return parse_conan_build_info(
-        conanbuildinfo,
-        "bindirs" if sys.platform == "win32" else "libdirs"
+        conanbuildinfo, "bindirs" if sys.platform == "win32" else "libdirs"
     )
 
 
@@ -57,6 +54,11 @@ class BuildPybind11Extension(build_ext):
         # self.inplace keeps getting reset by the time it is needed so
         # capture it here
         self._inplace = self.inplace
+
+    def initialize_options(self):
+        """Init extra options."""
+        super().initialize_options()
+        self.linking_library_search_paths = []
 
     def find_deps(
         self, lib: str, search_paths: Optional[List[str]] = None
@@ -105,7 +107,9 @@ class BuildPybind11Extension(build_ext):
             if conanbuildinfo:
                 strategies.insert(
                     0,
-                    UseConanFileBuildInfo(path=os.path.dirname(conanbuildinfo))
+                    UseConanFileBuildInfo(
+                        path=os.path.dirname(conanbuildinfo)
+                    ),
                 )
         missing_libs = set(ext.libraries)
         system_libs = ["pthread", "m"]
@@ -132,18 +136,20 @@ class BuildPybind11Extension(build_ext):
             build_conan.build_temp,
         ]
         for location in conan_build_info_locations:
-            conan_build_info =\
-                os.path.join(location, "conan_build_info.json")
+            conan_build_info = os.path.join(location, "conan_build_info.json")
             if os.path.exists(conan_build_info):
                 break
         else:
             raise FileNotFoundError(
                 f"Missing file conan_build_info.json. "
-                f"Searched locations {*conan_build_info_locations, }"
+                f"Searched locations {(*conan_build_info_locations,)}"
             )
 
-        return conan_libs.find_linking_libraries_with_conan_build_info_json(
-            conan_build_info
+        return (
+            conan_libs.find_linking_libraries_with_conan_build_info_json(
+                conan_build_info
+            )
+            + self.linking_library_search_paths
         )
 
     def build_extension(self, ext: Pybind11Extension) -> None:
@@ -155,8 +161,7 @@ class BuildPybind11Extension(build_ext):
         )
 
         deps.fixup_library(
-            created_extension,
-            self._get_linking_library_paths()
+            created_extension, self._get_linking_library_paths()
         )
         if sys.platform == "darwin":
             self.spawn(["otool", "-L", created_extension])
