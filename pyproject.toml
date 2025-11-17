@@ -15,7 +15,7 @@ dependencies = [
     "setuptools>=77.0.1",
     'wheel',
     "cmake",
-    'pybind11~=2.10.1',
+    'pybind11<3.0',
     'patchelf; sys_platform == "linux"',
     "conan",
     'toml',
