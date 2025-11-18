@@ -1296,7 +1296,7 @@ requires-dist = [
     { name = "cmake" },
     { name = "conan" },
     { name = "patchelf", marker = "sys_platform == 'linux'" },
-    { name = "pybind11", specifier = "~=2.10.1" },
+    { name = "pybind11", specifier = "<3.0" },
     { name = "pyyaml" },
     { name = "setuptools", specifier = ">=77.0.1" },
     { name = "toml" },
