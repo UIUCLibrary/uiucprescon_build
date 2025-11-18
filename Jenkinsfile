@@ -355,7 +355,7 @@ pipeline {
                                                     sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                     envs = sh(
                                                         label: 'Get tox environments',
-                                                        script: './venv/bin/uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                        script: './venv/bin/uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
                                                         returnStdout: true,
                                                     ).trim().split('\n')
                                                 }
@@ -452,7 +452,7 @@ pipeline {
                                                     bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
                                                     envs = bat(
                                                         label: 'Get tox environments',
-                                                        script: '@.\\venv\\Scripts\\uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                        script: '@.\\venv\\Scripts\\uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
                                                         returnStdout: true,
                                                     ).trim().split('\r\n')
                                                 }
@@ -549,7 +549,7 @@ pipeline {
                                                 sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                 envs = sh(
                                                     label: 'Get tox environments',
-                                                    script: './venv/bin/uvx --quiet --with tox-uv tox list -d --no-desc',
+                                                    script: './venv/bin/uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\n')
                                             }
@@ -654,15 +654,12 @@ pipeline {
                     when{
                         equals expected: true, actual: params.TEST_PACKAGES
                     }
-                    environment{
-                        UV_CONSTRAINT='requirements-dev.txt'
-                    }
                     steps{
                         customMatrix(
                             axes: [
                                 [
                                     name: 'PYTHON_VERSION',
-                                    values: ['3.10','3.11', '3.12','3.13']
+                                    values: ['3.10','3.11', '3.12','3.13', '3.14']
                                 ],
                                 [
                                     name: 'OS',
@@ -726,8 +723,7 @@ pipeline {
                                                                         powershell(
                                                                             label: 'Testing with tox',
                                                                             script: """uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                       uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
-                                                                                       uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                       uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                                     """
                                                                         )
                                                                     }
@@ -742,6 +738,7 @@ pipeline {
                                                             'UV_TOOL_DIR=/tmp/uvtools',
                                                             'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
                                                             'UV_CACHE_DIR=/tmp/uvcache',
+                                                            'UV_PYTHON_PREFERENCE=only-system'
                                                         ]){
                                                             def imageName = UUID.randomUUID().toString()
                                                             try{
@@ -756,9 +753,8 @@ pipeline {
                                                                         label: 'Testing with tox',
                                                                         script: """python3 -m venv venv
                                                                                    ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                   ./venv/bin/uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
                                                                                    ./venv/bin/uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                   ./venv/bin/uvx --python-preference=only-system -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                   ./venv/bin/uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                                 """
                                                                     )
                                                                 }
@@ -775,8 +771,7 @@ pipeline {
                                                             label: 'Testing with tox',
                                                             script: """python3 -m venv venv
                                                                        ./venv/bin/pip install --disable-pip-version-check uv
-                                                                       ./venv/bin/uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
-                                                                       ./venv/bin/uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                       ./venv/bin/uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                     """
                                                         )
                                                     } else {
@@ -786,7 +781,7 @@ pipeline {
                                                                        .\\venv\\Scripts\\pip install --disable-pip-version-check uv
                                                                        .\\venv\\Scripts\\uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
                                                                        .\\venv\\Scripts\\uv python install cpython-${entry.PYTHON_VERSION}
-                                                                       .\\venv\\Scripts\\uvx -c ${env.UV_CONSTRAINT} --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                       .\\venv\\Scripts\\uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                     """
                                                         )
                                                     }
