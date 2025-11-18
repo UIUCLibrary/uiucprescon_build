@@ -1,3 +1,9 @@
+## v0.4.2 (2025-11-18)
+
+### Feat
+
+- loosen up pybind11 requirements to <3.0
+
 ## v0.4.1 (2025-11-17)
 
 ### Feat
