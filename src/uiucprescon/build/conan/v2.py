@@ -149,6 +149,8 @@ def _build_deps(
         "core:non_interactive=True",
     ] + [f"--build={b}" for b in build]
 
+    conan_args += ["-c", "tools.build:skip_test=True"]
+    conan_args += ["-c", "tools.graph:skip_test=True"]
     if verbose:
         conan_args += ["-c:h", "tools.build:verbosity=verbose"]
         conan_args += ["-c:h", "tools.compilation:verbosity=verbose"]
