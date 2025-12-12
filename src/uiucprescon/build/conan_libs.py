@@ -421,7 +421,7 @@ class BuildConan(setuptools.Command):
             f"path {', '.join(metadata['lib_paths'])} ",
             5,
         )
-
+        breakpoint()
         for extension in build_ext_cmd.extensions:
             for lib in metadata["libs"]:
                 if lib not in extension.libraries:
