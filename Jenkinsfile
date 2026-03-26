@@ -67,13 +67,13 @@ pipeline {
                                 docker{
                                     image 'python'
                                     label 'docker && linux && x86_64'
-                                    args '--mount source=python-tmp-uiucprescon_build,target=/tmp'
+                                    args '--mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.tree-sitter:exec --tmpfs /.config:exec'
                                 }
                             }
                             environment{
                                 PIP_CACHE_DIR='/tmp/pipcache'
                                 UV_TOOL_DIR='/tmp/uvtools'
-                                UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
+                                UV_PYTHON_CACHE_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
                                 UV_PROJECT_ENVIRONMENT='./venv'
                                 UV_CONFIG_FILE=createUnixUvConfig()
@@ -339,7 +339,7 @@ pipeline {
                             environment{
                                 PIP_CACHE_DIR='/tmp/pipcache'
                                 UV_TOOL_DIR='/tmp/uvtools'
-                                UV_PYTHON_INSTALL_DIR='/tmp/uvpython'
+                                UV_PYTHON_CACHE_DIR='/tmp/uvpython'
                                 UV_CACHE_DIR='/tmp/uvcache'
                                 UV_PROJECT_ENVIRONMENT='./venv'
                                 UV_PYTHON_PREFERENCE='only-system'
@@ -377,7 +377,7 @@ pipeline {
                                                             withEnv([
                                                                 'PIP_CACHE_DIR=/tmp/pipcache',
                                                                 'UV_TOOL_DIR=/tmp/uvtools',
-                                                                'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
+                                                                'UV_PYTHON_CACHE_DIR=/tmp/uvpython',
                                                                 'UV_CACHE_DIR=/tmp/uvcache',
                                                                 "UV_CONFIG_FILE=${createUnixUvConfig()}",
 
@@ -430,7 +430,7 @@ pipeline {
                             environment{
                                  PIP_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\pipcache'
                                  UV_TOOL_DIR='C:\\Users\\ContainerUser\\Documents\\uvtools'
-                                 UV_PYTHON_INSTALL_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
+                                 UV_PYTHON_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\uvpython'
                                  UV_CACHE_DIR='C:\\Users\\ContainerUser\\Documents\\uvcache'
                                  UV_PROJECT_ENVIRONMENT='.\\venv'
                                  //  VC_RUNTIME_INSTALLER_LOCATION='c:\\msvc_runtime\\'
@@ -444,7 +444,7 @@ pipeline {
                                             withEnv(["UV_CONFIG_FILE=${createWindowUVConfig()}"]){
                                                 docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python')
                                                     .inside("\
-                                                        --mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR} \
+                                                        --mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} \
                                                         --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
                                                         --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
                                                         "
@@ -486,7 +486,7 @@ pipeline {
                                                                 try{
                                                                     withEnv(["UV_CONFIG_FILE=${createWindowUVConfig()}"]){
                                                                         image.inside("\
-                                                                             --mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR} \
+                                                                             --mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} \
                                                                              --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
                                                                              --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
                                                                              "
@@ -701,7 +701,7 @@ pipeline {
                                                         withEnv([
                                                             'PIP_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\pipcache',
                                                             'UV_TOOL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvtools',
-                                                            'UV_PYTHON_INSTALL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvpython',
+                                                            'UV_PYTHON_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvpython',
                                                             'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
                                                         ]){
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
@@ -715,7 +715,7 @@ pipeline {
                                                             }
                                                             try{
                                                                 image.inside(
-                                                                    "--mount type=volume,source=uv_python_install_dir,target=${env.UV_PYTHON_INSTALL_DIR}"
+                                                                    "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR}"
                                                                   + " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR}"
                                                                   + " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
                                                                 ){
@@ -736,7 +736,7 @@ pipeline {
                                                         withEnv([
                                                             'PIP_CACHE_DIR=/tmp/pipcache',
                                                             'UV_TOOL_DIR=/tmp/uvtools',
-                                                            'UV_PYTHON_INSTALL_DIR=/tmp/uvpython',
+                                                            'UV_PYTHON_CACHE_DIR=/tmp/uvpython',
                                                             'UV_CACHE_DIR=/tmp/uvcache',
                                                             'UV_PYTHON_PREFERENCE=only-system'
                                                         ]){
@@ -748,7 +748,7 @@ pipeline {
                                                                 throw e
                                                             }
                                                             try{
-                                                                image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
+                                                                image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.local/share:exec --tmpfs /.local/bin:exec'){
                                                                     sh(
                                                                         label: 'Testing with tox',
                                                                         script: """python3 -m venv venv
