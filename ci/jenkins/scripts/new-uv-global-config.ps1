@@ -13,6 +13,8 @@ $scriptName = $MyInvocation.MyCommand.Name
 
 
 foreach ($arg in $args) {
+    if ([string]::IsNullOrWhiteSpace($arg)) { continue }
+
     '' | Add-Content -Path $GLOBAL_CONFIG_FILE -Encoding UTF8
     '[[index]]' | Add-Content -Path $GLOBAL_CONFIG_FILE -Encoding UTF8
     "url = `"$arg`"" | Add-Content -Path $GLOBAL_CONFIG_FILE -Encoding UTF8
