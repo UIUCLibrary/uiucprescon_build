@@ -59,20 +59,22 @@ COPY ci/docker/shared/conan/remotes.json  ${CONAN_HOME}/remotes.json
 COPY ci/docker/windows/conan/profile.ini ${CONAN_HOME}/profiles/default
 COPY tests/test_files/zstd_from_conan/conanfile.py c:/tests/test_files/zstd_from_conan/conanfile.py
 ARG CONAN_CENTER_PROXY_V2_URL
-RUN uvx --with cmake --with ninja conan profile detect --exist-ok ; `
+COPY uv.lock pyproject.toml c:/temp/
+ENV UV_PROJECT=c:\\temp\\
+RUN uv run --frozen --only-group=test --with cmake --with ninja conan profile detect --exist-ok ; `
     $conanCenterUrl = (((Get-Content -Raw -Path ${Env:CONAN_HOME}\remotes.json) | ConvertFrom-Json).remotes[0].url);`
     if (${env:CONAN_CENTER_PROXY_V2_URL} -ne ${conanCenterUrl}) { `
       Write-Host "Using a proxy for conan center: $Env:CONAN_CENTER_PROXY_V2_URL" ; `
       Copy-Item -Path "${Env:CONAN_HOME}\remotes.json" -Destination "c:\remotes.json" ; `
-      uvx --with cmake --with ninja conan remote update conan-center --url ${env:CONAN_CENTER_PROXY_V2_URL}; `
+      uv run --frozen --only-group=test --with ninja conan remote update conan-center --url ${env:CONAN_CENTER_PROXY_V2_URL}; `
     }; `
-    uvx --with cmake --with ninja conan install c:/tests/test_files/zstd_from_conan/conanfile.py --build=missing -pr:b=default ; `
+    uv run --frozen --only-group=test --with cmake --with ninja conan install c:/tests/test_files/zstd_from_conan/conanfile.py --build=missing -pr:b=default ; `
     if ($LASTEXITCODE -ne 0) { `
       throw \"Command 'conan install' failed with exit code: $LASTEXITCODE\"`
     } ;`
-    uvx --with cmake --with ninja conan cache clean "*" -b --source --build --temp ; `
+    uv run --frozen --only-group=test --with cmake --with ninja conan cache clean "*" -b --source --build --temp ; `
     uv cache clean --no-progress ; `
-    if (${env:CONAN_CENTER_PROXY_V2_URL} -ne ${conanCenterUrl}) { `
+    if (Test-Path -Path "c:\remotes.json" ) { `
       Move-Item -Path "c:\remotes.json" -Destination "${Env:CONAN_HOME}\remotes.json" -Force ;`
     }
 # ==============================================================================
