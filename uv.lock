@@ -1349,6 +1349,10 @@ ci = [
     { name = "types-pyyaml" },
     { name = "types-toml" },
 ]
+code-style = [
+    { name = "flake8" },
+    { name = "pydocstyle" },
+]
 dev = [
     { name = "bandit" },
     { name = "conan" },
@@ -1366,6 +1370,17 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-toml" },
 ]
+lint = [
+    { name = "flake8" },
+    { name = "mypy" },
+    { name = "pydocstyle" },
+    { name = "pylint" },
+    { name = "types-pyyaml" },
+    { name = "types-toml" },
+]
+security = [
+    { name = "bandit" },
+]
 test = [
     { name = "conan" },
     { name = "pytest" },
@@ -1376,6 +1391,11 @@ tox = [
 tox-uv = [
     { name = "tox" },
     { name = "tox-uv-bare" },
+]
+type-checking = [
+    { name = "mypy" },
+    { name = "types-pyyaml" },
+    { name = "types-toml" },
 ]
 
 [package.metadata]
@@ -1409,6 +1429,10 @@ ci = [
     { name = "types-pyyaml" },
     { name = "types-toml" },
 ]
+code-style = [
+    { name = "flake8" },
+    { name = "pydocstyle" },
+]
 dev = [
     { name = "bandit" },
     { name = "conan", specifier = ">=2.0" },
@@ -1426,6 +1450,15 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-toml" },
 ]
+lint = [
+    { name = "flake8" },
+    { name = "mypy" },
+    { name = "pydocstyle" },
+    { name = "pylint" },
+    { name = "types-pyyaml" },
+    { name = "types-toml" },
+]
+security = [{ name = "bandit" }]
 test = [
     { name = "conan", specifier = ">=2.0" },
     { name = "pytest" },
@@ -1434,6 +1467,11 @@ tox = [{ name = "tox" }]
 tox-uv = [
     { name = "tox" },
     { name = "tox-uv-bare" },
+]
+type-checking = [
+    { name = "mypy" },
+    { name = "types-pyyaml" },
+    { name = "types-toml" },
 ]
 
 [[package]]

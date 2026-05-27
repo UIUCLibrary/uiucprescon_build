@@ -41,21 +41,35 @@ tox-uv = [
     {include-group = "tox"},
     "tox-uv-bare"
 ]
-dev = [
-    "bandit",
-    "coverage",
-    "flake8",
-    "lxml",
+type-checking = [
     "mypy",
-    "pre-commit",
-    "pydocstyle",
-    {include-group = "test"},
-    {include-group = "tox"},
-    "pylint",
-    "ruff",
-    "sphinx",
     "types-toml",
     "types-pyyaml",
+]
+lint = [
+    "pylint",
+    {include-group = "type-checking"},
+    {include-group = "code-style"},
+]
+code-style = [
+    "flake8", "pydocstyle",
+]
+security = [
+    "bandit",
+]
+dev = [
+    "coverage",
+    "lxml",
+    "pre-commit",
+    {include-group = "security"},
+    {include-group = "code-style"},
+    {include-group = "type-checking"},
+    {include-group = "test"},
+    {include-group = "tox"},
+    {include-group = "lint"},
+    "ruff",
+    "sphinx",
+
 ]
 ci = ["pysonar", {include-group = "dev"}]
 
