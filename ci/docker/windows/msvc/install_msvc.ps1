@@ -161,6 +161,8 @@ function InstallMSVC{
         [string]$VsInstallPath,
         [string]$ConfigFile
     )
+    $updateProcesses = @("TiWorker", "TrustedInstaller")
+
     $InstallerFile = "vs_buildtools.exe"
     Invoke-WebRequest $VsbuildtoolsURL -OutFile $InstallerFile
     Write-Host "Installing Visual Studio Build Tools to ${VsInstallPath}"
@@ -189,11 +191,11 @@ function InstallMSVC{
     $resultingConfigFile="c:\setup\myconfig.vsconfig"
     $exportArgs = @(`
         'export',
-    '--quiet',
-    '--nocache',
-    '--force',
-    '--config', ${resultingConfigFile},
-    '--installPath', ${VsInstallPath}
+        '--quiet',
+        '--nocache',
+        '--force',
+        '--config', ${resultingConfigFile},
+        '--installPath', ${VsInstallPath}
     )
     $exportProcess = Start-Process -NoNewWindow -PassThru -FilePath 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe'  -ArgumentList $exportArgs   -Wait
     if ( $exportProcess.ExitCode -eq 0) {
@@ -239,7 +241,49 @@ function InstallMSVC{
     }
     Write-Host "Cleaning up Package Cache - Done"
 
+    Write-Host "Checking for active Windows Update processes..."
 
+    Get-WindowsUpdate
+
+    # Check if any of these processes are actually running right now
+    $active = Get-Process -Name $updateProcesses -ErrorAction SilentlyContinue
+
+    if ($active) {
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        Write-Host "Update in progress. Waiting for completion..."
+
+        # Loop while the processes are still active
+        while (Get-Process -Name $updateProcesses -ErrorAction SilentlyContinue) {
+            Get-Process -Name $updateProcesses -ErrorAction SilentlyContinue
+            Write-Host "Updating..."
+
+            Start-Sleep -Seconds 30
+        }
+
+        Write-Host "Windows Update processes have finished."
+    } else {
+        Write-Host "No active Windows Update detected. Exiting script."
+    }
+
+    # ======== Wait for Windows Update to finish ========
+    # It seems that installing MSVC build tools triggers Windows
+    # update. This generates a lot of extra unneeded files for
+    # the docker layer and bloats the image significantly.
+    # Waiting for the update to finish and then cleaning up the
+    # generated files seems to be the best solution to keep the
+    # layer size down.
+
+    $timeout = New-TimeSpan -Hours 1
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $installer = New-Object -ComObject Microsoft.Update.Installer
+    while ($installer.IsBusy) {
+        Write-Host "Windows Update is currently busy installing updates. Waiting..."
+        if ($stopwatch.Elapsed -gt $timeout) {
+            $stopwatch.Stop()
+            throw "Timeout exceeded: Operation took longer than 1 hour."
+        }
+        Start-Sleep -Seconds 30
+    }
     # ======== Cleanup SoftwareDistribution folder ========
     $SoftwareDistributionDownloadPath = "C:\Windows\SoftwareDistribution\Download"
     if (Test-Path "$SoftwareDistributionDownloadPath"){
@@ -343,6 +387,9 @@ function AddStartupScripts{
     Remove-Item -Path $local:newDirPath -Recurse
 
 }
+
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+Install-Module PSWindowsUpdate -Force
 
 # ========== Main ==========
 InstallMSVC `
