@@ -6,8 +6,6 @@ ARG VS_INSTALL_PATH="C:\BuildTools"
 ARG PIP_EXTRA_INDEX_URL
 ARG PIP_INDEX_URL
 
-ARG CHOCOLATEY_SOURCE=https://chocolatey.org/api/v2
-
 ARG CONAN_USER_HOME=C:/Users/ContainerAdministrator
 # Path where conan data will be stored
 
@@ -33,32 +31,21 @@ ARG VS_DevPowershellArguments='-arch=amd64'
 
 RUN c:/scripts/install_msvc.ps1 -InstallPath ${Env:VS_INSTALL_PATH} -VSConfigFile c:/setup/config.vsconfig -DevCmdArguments ${Env:VS_DevCmdArguments} -DevPowershellArguments ${Env:VS_DevPowershellArguments} -VSVersion ${Env:VS_VERSION}; `
     Write-Host "Note: Exporting This layer can take a while."
-
-ARG CHOCOLATEY_SOURCE
-ARG ChocolateyEnvironmentDebug=false
-ARG chocolateyVersion
-COPY ci/docker/windows/chocolatey/install.ps1 c:/choco/install.ps1
-COPY ci/docker/windows/chocolatey/get_latest_chocolatey_url.ps1 c:/choco/get_latest_chocolatey_url.ps1
-COPY ci/docker/windows/chocolatey/packages.xml choco/packages.config
-COPY ci/docker/windows/chocolatey/verifyenv.ps1 c:/verifyenv.ps1
-RUN Set-ExecutionPolicy Bypass -Scope Process -Force; `
-    $chocolateyDownloadUrl = c:/choco/get_latest_chocolatey_url.ps1 -packageRepo $env:CHOCOLATEY_SOURCE; `
-    c:/choco/install.ps1 -ChocolateyDownloadUrl $chocolateyDownloadUrl;`
-    if( -not ([string]::IsNullOrEmpty($Env:CHOCOLATEY_SOURCE ))) `
-    { `
-        Write-Host "Adding $env:CHOCOLATEY_SOURCE to chocolatey sources" ; `
-        choco source add -n=CHOCOLATEY_SOURCE --priority=1 -s=\"${env:CHOCOLATEY_SOURCE}\"; `
-    }; `
-    Write-Host "Disabling Showing Download Progress" ; `
-    choco feature disable -n=showDownloadProgress ; `
-    choco sources ; `
-    choco install -y --stoponfirstfailure --no-progress c:/choco/packages.config ;`
-    refreshenv ; `
-    choco cache remove --confirm;`
-    Write-Host "Finished install packages with Chocolatey" ;`
+COPY ci/docker/windows/scoop c:/scoopinstall
+RUN irm get.scoop.sh -outfile 'install.ps1' ; `
+    .\install.ps1 -RunAsAdmin ; `
+    Remove-Item -Path ".\install.ps1" ; `
+    scoop install git ; `
+    scoop bucket add versions ; `
+    scoop import c:/scoopinstall/scoopfile.json ; `
+    uv python update-shell ; `
+    scoop cache show ; `
+    Write-Host "Cleaning up cache" ;`
+    scoop cache clean ; `
+    Write-Host "Cleaning up cache - Done" ;`
     Write-Host "Verifying installed packages" ;`
-    $env:Path = [System.Environment]::GetEnvironmentVariable(\"Path\",\"Machine\") + \";\" + [System.Environment]::GetEnvironmentVariable(\"Path\",\"User\") ; `
-    c:/verifyenv.ps1
+    c:/scoopinstall/verifyenv.ps1 ;`
+    Write-Host "Verifying installed packages - Done"
 
 RUN uv python update-shell
 
