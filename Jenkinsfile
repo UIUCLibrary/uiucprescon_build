@@ -165,6 +165,13 @@ pipeline {
                                                         }
                                                     }
                                                 }
+                                                stage('Audit Requirement Freeze File'){
+                                                    steps{
+                                                        catchError(buildResult: 'UNSTABLE', message: 'uv audit found some issues', stageResult: 'UNSTABLE') {
+                                                            sh './venv/bin/uv audit'
+                                                        }
+                                                    }
+                                                }
                                                 stage('PyTest'){
                                                     environment{
                                                         USERNAME='jenkins'
