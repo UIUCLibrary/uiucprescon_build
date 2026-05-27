@@ -1395,7 +1395,6 @@ dev = [
 ]
 test = [
     { name = "conan" },
-    { name = "coverage" },
     { name = "pytest" },
 ]
 tox = [
@@ -1456,7 +1455,6 @@ dev = [
 ]
 test = [
     { name = "conan", specifier = ">=2.0" },
-    { name = "coverage" },
     { name = "pytest" },
 ]
 tox = [{ name = "tox" }]
