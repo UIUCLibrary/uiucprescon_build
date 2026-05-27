@@ -609,7 +609,7 @@ pipeline {
                 stage('Build Python Packages'){
                     agent {
                         docker{
-                            image 'python'
+                            image 'ghcr.io/astral-sh/uv:debian'
                             label 'docker && linux'
                             args "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp"
                         }
@@ -628,11 +628,7 @@ pipeline {
                     steps{
                         sh(
                             label: 'Package',
-                            script: '''python3 -m venv venv && venv/bin/pip install --disable-pip-version-check uv
-                                       trap "rm -rf venv" EXIT
-                                       . ./venv/bin/activate
-                                       uv build
-                                    '''
+                            script: 'uv build'
                         )
                         archiveArtifacts artifacts: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', fingerprint: true
                         stash includes: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', name: 'PYTHON_PACKAGES'
