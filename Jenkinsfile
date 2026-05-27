@@ -725,7 +725,7 @@ pipeline {
                                                                     " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
                                                                 ){
                                                                     withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
-                                                                        powershell(
+                                                                        bat(
                                                                             label: 'Testing with tox',
                                                                             script: """uv python install cpython-${entry.PYTHON_VERSION}
                                                                                        uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
