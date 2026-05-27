@@ -67,7 +67,7 @@ pipeline {
                                 docker{
                                     image 'python'
                                     label 'docker && linux && x86_64'
-                                    args '--mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.tree-sitter:exec --tmpfs /.config:exec'
+                                    args "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.tree-sitter:exec --tmpfs /.config:exec"
                                 }
                             }
                             environment{
@@ -162,6 +162,13 @@ pipeline {
                                                     post {
                                                         always{
                                                             recordIssues(tools: [pyDocStyle(pattern: 'reports/pydocstyle-report.txt')])
+                                                        }
+                                                    }
+                                                }
+                                                stage('Audit Requirement Freeze File'){
+                                                    steps{
+                                                        catchError(buildResult: 'UNSTABLE', message: 'uv audit found some issues', stageResult: 'UNSTABLE') {
+                                                            sh './venv/bin/uv audit'
                                                         }
                                                     }
                                                 }
@@ -355,7 +362,7 @@ pipeline {
                                                     sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                     envs = sh(
                                                         label: 'Get tox environments',
-                                                        script: './venv/bin/uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
+                                                        script: './venv/bin/uv run --frozen --only-group=tox --quiet tox list -d --no-desc',
                                                         returnStdout: true,
                                                     ).trim().split('\n')
                                                 }
@@ -372,7 +379,7 @@ pipeline {
                                                 {
                                                     node('docker && linux'){
                                                         checkout scm
-                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                        def image = docker.build(UUID.randomUUID().toString(), '-f ci/docker/linux/tox/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
                                                         try{
                                                             withEnv([
                                                                 'PIP_CACHE_DIR=/tmp/pipcache',
@@ -383,14 +390,13 @@ pipeline {
 
                                                             ]){
                                                                 try{
-                                                                    image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp'){
+                                                                    image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp"){
                                                                         retry(3){
                                                                             try{
                                                                                 sh( label: 'Running Tox',
                                                                                     script: """python3 -m venv venv --clear
                                                                                                ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                               ./venv/bin/uv sync --frozen --only-group tox
-                                                                                               ./venv/bin/uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
+                                                                                               ./venv/bin/uv run --frozen --group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                             """
                                                                                     )
                                                                             } catch(e) {
@@ -444,6 +450,7 @@ pipeline {
                                             withEnv(["UV_CONFIG_FILE=${createWindowUVConfig()}"]){
                                                 docker.image(env.DEFAULT_PYTHON_DOCKER_IMAGE ? env.DEFAULT_PYTHON_DOCKER_IMAGE: 'python')
                                                     .inside("\
+                                                        --label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" \
                                                         --mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} \
                                                         --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
                                                         --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
@@ -452,7 +459,7 @@ pipeline {
                                                     bat(script: 'python -m venv venv --clear && venv\\Scripts\\pip install --disable-pip-version-check uv')
                                                     envs = bat(
                                                         label: 'Get tox environments',
-                                                        script: '@.\\venv\\Scripts\\uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
+                                                        script: '@.\\venv\\Scripts\\uv run --frozen --only-group=tox --quiet tox list -d --no-desc',
                                                         returnStdout: true,
                                                     ).trim().split('\r\n')
                                                 }
@@ -471,14 +478,16 @@ pipeline {
                                                         retry(1){
                                                             checkout scm
                                                             def image
-                                                            lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                                timeout(120){
-                                                                    def imageName = UUID.randomUUID().toString()
-                                                                    try{
-                                                                        image = docker.build(imageName, '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
-                                                                    } catch(e){
-                                                                        bat(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
-                                                                        throw e
+                                                            retry(3){
+                                                                lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
+                                                                    timeout(120){
+                                                                        def imageName = UUID.randomUUID().toString()
+                                                                        try{
+                                                                            image = docker.build(imageName, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                        } catch(e){
+                                                                            bat(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
+                                                                            throw e
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -486,6 +495,7 @@ pipeline {
                                                                 try{
                                                                     withEnv(["UV_CONFIG_FILE=${createWindowUVConfig()}"]){
                                                                         image.inside("\
+                                                                             --label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" \
                                                                              --mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} \
                                                                              --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} \
                                                                              --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
@@ -496,8 +506,7 @@ pipeline {
                                                                                     timeout(120){
                                                                                         bat(label: 'Running Tox',
                                                                                             script: """uv python install cpython-${version}
-                                                                                                       uv sync --frozen --only-group tox
-                                                                                                       uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv
+                                                                                                       uv run --frozen --only-group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv
                                                                                                 """
                                                                                         )
                                                                                     }
@@ -549,7 +558,7 @@ pipeline {
                                                 sh(script: 'python3 -m venv venv --clear && venv/bin/pip install --disable-pip-version-check uv')
                                                 envs = sh(
                                                     label: 'Get tox environments',
-                                                    script: './venv/bin/uv run --frozen --only-group=tox --quiet --with tox-uv tox list -d --no-desc',
+                                                    script: './venv/bin/uv run --frozen --only-group=tox --quiet tox list -d --no-desc',
                                                     returnStdout: true,
                                                 ).trim().split('\n')
                                             }
@@ -571,8 +580,7 @@ pipeline {
                                                                     try{
                                                                         sh( label: 'Running Tox',
                                                                             script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                        ./venv/bin/uv sync --frozen --only-group tox
-                                                                                        ./venv/bin/uv run --frozen --with tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
+                                                                                        ./venv/bin/uv run --frozen --only-group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                     """
                                                                         )
                                                                     } catch(e) {
@@ -608,9 +616,9 @@ pipeline {
                 stage('Build Python Packages'){
                     agent {
                         docker{
-                            image 'python'
+                            image 'ghcr.io/astral-sh/uv:debian'
                             label 'docker && linux'
-                            args '--mount source=python-tmp-uiucprescon_build,target=/tmp'
+                            args "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp"
                         }
                     }
                     when{
@@ -627,11 +635,7 @@ pipeline {
                     steps{
                         sh(
                             label: 'Package',
-                            script: '''python3 -m venv venv && venv/bin/pip install --disable-pip-version-check uv
-                                       trap "rm -rf venv" EXIT
-                                       . ./venv/bin/activate
-                                       uv build
-                                    '''
+                            script: 'uv build'
                         )
                         archiveArtifacts artifacts: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', fingerprint: true
                         stash includes: 'dist/*.whl,dist/*.tar.gz,dist/*.zip', name: 'PYTHON_PACKAGES'
@@ -659,7 +663,7 @@ pipeline {
                             axes: [
                                 [
                                     name: 'PYTHON_VERSION',
-                                    values: ['3.10','3.11', '3.12','3.13', '3.14']
+                                    values: ['3.10','3.11', '3.12','3.13', '3.14', '3.14t']
                                 ],
                                 [
                                     name: 'OS',
@@ -707,7 +711,7 @@ pipeline {
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
                                                                 def image_name = UUID.randomUUID().toString()
                                                                 try{
-                                                                    image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                    image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
                                                                 } catch(e){
                                                                     bat(returnStatus: true, script: "docker rmi --no-prune ${image_name}")
                                                                     throw e
@@ -715,15 +719,16 @@ pipeline {
                                                             }
                                                             try{
                                                                 image.inside(
-                                                                    "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR}"
-                                                                  + " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR}"
-                                                                  + " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
+                                                                    "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" " +
+                                                                    "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " +
+                                                                    " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " +
+                                                                    " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
                                                                 ){
                                                                     withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
-                                                                        powershell(
+                                                                        bat(
                                                                             label: 'Testing with tox',
                                                                             script: """uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                       uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                       uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                                     """
                                                                         )
                                                                     }
@@ -742,21 +747,23 @@ pipeline {
                                                         ]){
                                                             def imageName = UUID.randomUUID().toString()
                                                             try{
-                                                                image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                                                                image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
                                                             } catch (e){
                                                                 sh(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
                                                                 throw e
                                                             }
                                                             try{
-                                                                image.inside('--mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.local/share:exec --tmpfs /.local/bin:exec'){
-                                                                    sh(
-                                                                        label: 'Testing with tox',
-                                                                        script: """python3 -m venv venv
-                                                                                   ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                   ./venv/bin/uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                   ./venv/bin/uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                                """
-                                                                    )
+                                                                image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.local/share:exec --tmpfs /.local/bin:exec"){
+                                                                    withEnv(["TOX_UV_PATH=${WORKSPACE}/venv/bin/uv"]){
+                                                                        sh(
+                                                                            label: 'Testing with tox',
+                                                                            script: """python3 -m venv venv
+                                                                                       ./venv/bin/pip install --disable-pip-version-check uv
+                                                                                       ./venv/bin/uv python install cpython-${entry.PYTHON_VERSION}
+                                                                                       ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                                    """
+                                                                        )
+                                                                    }
                                                                 }
                                                             } finally {
                                                                 if(image){
@@ -771,7 +778,7 @@ pipeline {
                                                             label: 'Testing with tox',
                                                             script: """python3 -m venv venv
                                                                        ./venv/bin/pip install --disable-pip-version-check uv
-                                                                       ./venv/bin/uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                       ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                     """
                                                         )
                                                     } else {
@@ -781,7 +788,7 @@ pipeline {
                                                                        .\\venv\\Scripts\\pip install --disable-pip-version-check uv
                                                                        .\\venv\\Scripts\\uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
                                                                        .\\venv\\Scripts\\uv python install cpython-${entry.PYTHON_VERSION}
-                                                                       .\\venv\\Scripts\\uv run --frozen --only-group=tox --with tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
+                                                                       .\\venv\\Scripts\\uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
                                                                     """
                                                         )
                                                     }

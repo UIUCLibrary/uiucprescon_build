@@ -32,27 +32,44 @@ build_conan = "uiucprescon.build.conan_libs:BuildConan"
 [dependency-groups]
 test = [
     "pytest",
-    "coverage",
     "conan>=2.0"
 ]
 tox = [
     "tox"
 ]
-
-dev = [
-    "bandit",
-    "flake8",
-    "lxml",
-    "mypy",
-    "pre-commit",
-    "pydocstyle",
-    {include-group = "test"},
+tox-uv = [
     {include-group = "tox"},
-    "pylint",
-    "ruff",
-    "sphinx",
+    "tox-uv-bare"
+]
+type-checking = [
+    "mypy",
     "types-toml",
     "types-pyyaml",
+]
+lint = [
+    "pylint",
+    {include-group = "type-checking"},
+    {include-group = "code-style"},
+]
+code-style = [
+    "flake8", "pydocstyle",
+]
+security = [
+    "bandit",
+]
+dev = [
+    "coverage",
+    "lxml",
+    "pre-commit",
+    {include-group = "security"},
+    {include-group = "code-style"},
+    {include-group = "type-checking"},
+    {include-group = "test"},
+    {include-group = "tox"},
+    {include-group = "lint"},
+    "ruff",
+    "sphinx",
+
 ]
 ci = ["pysonar", {include-group = "dev"}]
 
