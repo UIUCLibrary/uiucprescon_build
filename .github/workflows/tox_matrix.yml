@@ -13,7 +13,7 @@ jobs:
       tox_matrix: ${{ steps.dataStep.outputs.myoutput }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         name: Get tox environments
         with:
           cache: 'pip'
@@ -34,7 +34,7 @@ jobs:
     name: Python ${{ matrix.python-version }} ${{ matrix.os }} build
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip' # caching pip dependencies
