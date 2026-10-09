@@ -711,7 +711,9 @@ pipeline {
                                                             lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
                                                                 def image_name = UUID.randomUUID().toString()
                                                                 try{
-                                                                    image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                    retry(2){
+                                                                        image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                                                                    }
                                                                 } catch(e){
                                                                     bat(returnStatus: true, script: "docker rmi --no-prune ${image_name}")
                                                                     throw e
@@ -724,13 +726,19 @@ pipeline {
                                                                     " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " +
                                                                     " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
                                                                 ){
+                                                                    bat(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${entry.PYTHON_VERSION} --quiet 2>nul || uv python install cpython-${entry.PYTHON_VERSION}")
                                                                     withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
-                                                                        bat(
-                                                                            label: 'Testing with tox',
-                                                                            script: """uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                       uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                                    """
-                                                                        )
+                                                                        retry(3){
+                                                                            try{
+                                                                                bat(
+                                                                                    label: 'Testing with tox',
+                                                                                    script: "uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}"
+                                                                                )
+                                                                            } catch (e){
+                                                                                sleep 1
+                                                                                throw e
+                                                                            }
+                                                                        }
                                                                     }
                                                                 }
                                                             } finally {
