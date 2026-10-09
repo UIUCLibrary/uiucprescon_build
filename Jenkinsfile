@@ -42,6 +42,134 @@ def createUnixUvConfig(){
     return sh(label: 'Setting up uv.toml config file', script: "sh ${scriptFile} " + '$UV_INDEX_URL $UV_EXTRA_INDEX_URL', returnStdout: true).trim()
 }
 
+def test_package_on_macos(Map options = [:]){
+    node('macos && python3'){
+        try{
+            checkout scm
+            unstash 'PYTHON_PACKAGES'
+            findFiles(glob: options.packageType == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz').each{
+                sh(
+                    label: 'Testing with tox',
+                    script: """python3 -m venv venv
+                               ./venv/bin/pip install --disable-pip-version-check uv
+                               ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${it.path} -e py${options.pythonVersion.replace('.', '')}
+                            """
+                )
+            }
+        } finally {
+            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+        }
+    }
+}
+
+def test_package_on_windows(Map options = [:]){
+    node("windows && ${options.architecture} && docker"){
+        try{
+            checkout scm
+            unstash 'PYTHON_PACKAGES'
+            withEnv([
+                'PIP_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\pipcache',
+                'UV_TOOL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvtools',
+                'UV_PYTHON_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvpython',
+                'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
+            ]){
+                def image
+                lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
+                    def image_name = UUID.randomUUID().toString()
+                    try{
+                        retry(2){
+                            image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
+                        }
+                    } catch(e){
+                        bat(returnStatus: true, script: "docker rmi --no-prune ${image_name}")
+                        throw e
+                    }
+                }
+                try{
+                    image.inside(
+                        "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" " +
+                        "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " +
+                        " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " +
+                        " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
+                    ){
+                        bat(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${options.pythonVersion} --quiet 2>nul || uv python install cpython-${options.pythonVersion}")
+                        withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
+                            def MAX_RETRIES = 3
+                            def current_try = 0
+                            findFiles(glob: options.packageType == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz').each{
+                                retry(MAX_RETRIES){
+                                    current_try += 1
+                                    try{
+                                        bat(
+                                            label: 'Testing with tox',
+                                            script: "uv run --frozen --only-group=tox-uv tox --installpkg ${it.path} -e py${options.pythonVersion.replace('.', '')}"
+                                        )
+                                    } catch (e){
+                                        if(current_try < MAX_RETRIES){
+                                            sleep 5
+                                        }
+                                        throw e
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    bat "docker rmi --no-prune ${image.id}"
+                }
+            }
+        } finally {
+            bat "${tool(name: 'Default', type: 'git')} clean -dfx"
+        }
+    }
+}
+
+def test_package_on_linux(Map options = [:]){
+    node("linux && ${options.architecture} && docker"){
+        try{
+            checkout scm
+            unstash 'PYTHON_PACKAGES'
+            def image
+            withEnv([
+                'PIP_CACHE_DIR=/tmp/pipcache',
+                'UV_TOOL_DIR=/tmp/uvtools',
+                'UV_PYTHON_CACHE_DIR=/tmp/uvpython',
+                'UV_CACHE_DIR=/tmp/uvcache',
+                'UV_PYTHON_PREFERENCE=only-system'
+            ]){
+                def imageName = UUID.randomUUID().toString()
+                try{
+                    image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
+                } catch (e){
+                    sh(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
+                    throw e
+                }
+                try{
+                    image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.local/share:exec --tmpfs /.local/bin:exec"){
+                        findFiles(glob: options.packageType == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz').each{
+                            withEnv(["TOX_UV_PATH=${WORKSPACE}/venv/bin/uv"]){
+                                sh(
+                                    label: 'Testing with tox',
+                                    script: """python3 -m venv venv
+                                               ./venv/bin/pip install --disable-pip-version-check uv
+                                               ./venv/bin/uv python install cpython-${options.pythonVersion}
+                                               ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${it} -e py${options.pythonVersion.replace('.', '')}
+                                            """
+                                )
+                            }
+                        }
+                    }
+                } finally {
+                    if(image){
+                        sh "docker rmi --no-prune ${image.id}"
+                    }
+                }
+            }
+        } finally{
+            sh "${tool(name: 'Default', type: 'git')} clean -dfx"
+        }
+    }
+}
 
 pipeline {
     agent none
@@ -694,128 +822,19 @@ pipeline {
                             stages: [
                                 { entry ->
                                     stage('Test Package') {
-                                        node("${entry.OS} && ${entry.ARCHITECTURE} ${['linux', 'windows'].contains(entry.OS) ? '&& docker': ''}"){
-                                            try{
-                                                checkout scm
-                                                unstash 'PYTHON_PACKAGES'
-                                                if(['linux', 'windows'].contains(entry.OS)){
-                                                    def image
-
-                                                    if(entry.OS == 'windows'){
-                                                        withEnv([
-                                                            'PIP_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\pipcache',
-                                                            'UV_TOOL_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvtools',
-                                                            'UV_PYTHON_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvpython',
-                                                            'UV_CACHE_DIR=C:\\Users\\ContainerUser\\Documents\\cache\\uvcache',
-                                                        ]){
-                                                            lock("${env.JOB_NAME} - ${env.NODE_NAME}"){
-                                                                def image_name = UUID.randomUUID().toString()
-                                                                try{
-                                                                    retry(2){
-                                                                        image = docker.build(image_name, '-f ci/docker/windows/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg CONAN_CENTER_PROXY_V2_URL --build-arg CHOCOLATEY_SOURCE --build-arg chocolateyVersion' + (env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE ? " --build-arg FROM_IMAGE=${env.DEFAULT_DOCKER_DOTNET_SDK_BASE_IMAGE} ": ' ') + '.')
-                                                                    }
-                                                                } catch(e){
-                                                                    bat(returnStatus: true, script: "docker rmi --no-prune ${image_name}")
-                                                                    throw e
-                                                                }
-                                                            }
-                                                            try{
-                                                                image.inside(
-                                                                    "--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" " +
-                                                                    "--mount type=volume,source=uv_python_cache_dir,target=${env.UV_PYTHON_CACHE_DIR} " +
-                                                                    " --mount type=volume,source=pipcache,target=${env.PIP_CACHE_DIR} " +
-                                                                    " --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}"
-                                                                ){
-                                                                    bat(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${entry.PYTHON_VERSION} --quiet 2>nul || uv python install cpython-${entry.PYTHON_VERSION}")
-                                                                    withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
-                                                                        def MAX_RETRIES = 3
-                                                                        def current_try = 0
-                                                                        findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz').each{
-                                                                            retry(MAX_RETRIES){
-                                                                                current_try += 1
-                                                                                try{
-                                                                                    bat(
-                                                                                        label: 'Testing with tox',
-                                                                                        script: "uv run --frozen --only-group=tox-uv tox --installpkg ${it.path} -e py${entry.PYTHON_VERSION.replace('.', '')}"
-                                                                                    )
-                                                                                } catch (e){
-                                                                                    if(current_try < MAX_RETRIES){
-                                                                                        sleep 5
-                                                                                    }
-                                                                                    throw e
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            } finally {
-                                                                bat "docker rmi --no-prune ${image.id}"
-                                                            }
-                                                        }
-                                                    } else {
-                                                        withEnv([
-                                                            'PIP_CACHE_DIR=/tmp/pipcache',
-                                                            'UV_TOOL_DIR=/tmp/uvtools',
-                                                            'UV_PYTHON_CACHE_DIR=/tmp/uvpython',
-                                                            'UV_CACHE_DIR=/tmp/uvcache',
-                                                            'UV_PYTHON_PREFERENCE=only-system'
-                                                        ]){
-                                                            def imageName = UUID.randomUUID().toString()
-                                                            try{
-                                                                image = docker.build(imageName, '-f ci/docker/linux/tox/Dockerfile --label=purpose=ci --build-arg PIP_EXTRA_INDEX_URL --build-arg PIP_INDEX_URL --build-arg PIP_DOWNLOAD_CACHE=/.cache/pip --build-arg UV_CACHE_DIR --build-arg CONAN_CENTER_PROXY_V2_URL .')
-                                                            } catch (e){
-                                                                sh(returnStatus: true, script: "docker rmi --no-prune ${imageName}")
-                                                                throw e
-                                                            }
-                                                            try{
-                                                                image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp --tmpfs /.local/share:exec --tmpfs /.local/bin:exec"){
-                                                                    withEnv(["TOX_UV_PATH=${WORKSPACE}/venv/bin/uv"]){
-                                                                        sh(
-                                                                            label: 'Testing with tox',
-                                                                            script: """python3 -m venv venv
-                                                                                       ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                       ./venv/bin/uv python install cpython-${entry.PYTHON_VERSION}
-                                                                                       ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                                    """
-                                                                        )
-                                                                    }
-                                                                }
-                                                            } finally {
-                                                                if(image){
-                                                                    sh "docker rmi --no-prune ${image.id}"
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    if(isUnix()){
-                                                        sh(
-                                                            label: 'Testing with tox',
-                                                            script: """python3 -m venv venv
-                                                                       ./venv/bin/pip install --disable-pip-version-check uv
-                                                                       ./venv/bin/uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                    """
-                                                        )
-                                                    } else {
-                                                        bat(
-                                                            label: 'Testing with tox',
-                                                            script: """python -m venv venv
-                                                                       .\\venv\\Scripts\\pip install --disable-pip-version-check uv
-                                                                       .\\venv\\Scripts\\uv export --format requirements-txt --frozen --no-emit-project --group dev > ${env.UV_CONSTRAINT}
-                                                                       .\\venv\\Scripts\\uv python install cpython-${entry.PYTHON_VERSION}
-                                                                       .\\venv\\Scripts\\uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}
-                                                                    """
-                                                        )
-                                                    }
-                                                }
-                                            } finally{
-                                                if(isUnix()){
-                                                    sh "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                                } else {
-                                                    bat "${tool(name: 'Default', type: 'git')} clean -dfx"
-                                                }
-                                            }
+                                        if (entry.OS == 'linux') {
+                                            test_package_on_linux(architecture: entry.ARCHITECTURE, pythonVersion: entry.PYTHON_VERSION, packageType: entry.PACKAGE_TYPE)
+                                            return
                                         }
+                                        if (entry.OS == 'windows') {
+                                            test_package_on_windows(architecture: entry.ARCHITECTURE, pythonVersion: entry.PYTHON_VERSION, packageType: entry.PACKAGE_TYPE)
+                                            return
+                                        }
+                                        if (entry.OS == 'macos') {
+                                            test_package_on_macos(architecture: entry.ARCHITECTURE, pythonVersion: entry.PYTHON_VERSION, packageType: entry.PACKAGE_TYPE)
+                                            return
+                                        }
+                                        error("Unknown option ${entry.OS}")
                                     }
                                 }
                             ]
