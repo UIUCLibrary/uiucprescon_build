@@ -728,15 +728,22 @@ pipeline {
                                                                 ){
                                                                     bat(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${entry.PYTHON_VERSION} --quiet 2>nul || uv python install cpython-${entry.PYTHON_VERSION}")
                                                                     withEnv(['UV_PYTHON_PREFERENCE=only-managed']){
-                                                                        retry(3){
-                                                                            try{
-                                                                                bat(
-                                                                                    label: 'Testing with tox',
-                                                                                    script: "uv run --frozen --only-group=tox-uv tox --installpkg ${findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz')[0].path} -e py${entry.PYTHON_VERSION.replace('.', '')}"
-                                                                                )
-                                                                            } catch (e){
-                                                                                sleep 1
-                                                                                throw e
+                                                                        def MAX_RETRIES = 3
+                                                                        def current_try = 0
+                                                                        findFiles(glob: entry.PACKAGE_TYPE == 'wheel' ? 'dist/*.whl' : 'dist/*.tar.gz').each{
+                                                                            retry(MAX_RETRIES){
+                                                                                current_try += 1
+                                                                                try{
+                                                                                    bat(
+                                                                                        label: 'Testing with tox',
+                                                                                        script: "uv run --frozen --only-group=tox-uv tox --installpkg ${it.path} -e py${entry.PYTHON_VERSION.replace('.', '')}"
+                                                                                    )
+                                                                                } catch (e){
+                                                                                    if(current_try < MAX_RETRIES){
+                                                                                        sleep 5
+                                                                                    }
+                                                                                    throw e
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
