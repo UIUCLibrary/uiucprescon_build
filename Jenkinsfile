@@ -171,6 +171,38 @@ def test_package_on_linux(Map options = [:]){
     }
 }
 
+@NonCPS
+def getExclusions(config){
+    (config['supporting']['exclusions'] ?: []).collect{ exclusion ->
+        return exclusion.collect{ component ->
+            return ["name": component['name'], "values": component['values']]
+        }
+    }
+}
+
+def getConfig(){
+    def configData = [:]
+    node(){
+        checkout scm
+        def configID = 'uiucprescon_build_pipeline_config'
+        def defaultConfigFile = 'ci/jenkins/config.json'
+        try{
+            configFileProvider([configFile(fileId: configID, variable: 'config_file')]) {
+                echo "Using configuration from: \"$configID\""
+                configData = readJSON( file: config_file)
+            }
+        } catch (e){
+            echo "Using default configuration in ${defaultConfigFile}. To override, create a new config file in Jenkins with id: \"${configID}\""
+            configData = readJSON( file: defaultConfigFile)
+        }
+    }
+    configData['supporting']['exclusions'] = getExclusions(configData)
+    return configData
+}
+
+
+def config = getConfig()
+
 pipeline {
     agent none
     options {
@@ -791,33 +823,22 @@ pipeline {
                             axes: [
                                 [
                                     name: 'PYTHON_VERSION',
-                                    values: ['3.10','3.11', '3.12','3.13', '3.14', '3.14t']
+                                    values: config['supporting']['pythonVersions']
                                 ],
                                 [
                                     name: 'OS',
-                                    values: ['linux','macos','windows']
+                                    values: config['supporting']['operatingSystems']
                                 ],
                                 [
                                     name: 'ARCHITECTURE',
-                                    values: ['x86_64', 'arm64']
+                                    values: config['supporting']['architectures']
                                 ],
                                 [
                                     name: 'PACKAGE_TYPE',
                                     values: ['wheel', 'sdist'],
                                 ]
                             ],
-                            excludes: [
-                                [
-                                    [
-                                        name: 'OS',
-                                        values: 'windows'
-                                    ],
-                                    [
-                                        name: 'ARCHITECTURE',
-                                        values: 'arm64',
-                                    ]
-                                ]
-                            ],
+                            excludes: config['supporting']['exclusions'],
                             when: {entry -> nodesByLabel("${entry.OS} && ${entry.ARCHITECTURE} ${['linux', 'windows'].contains(entry.OS) ? '&& docker': ''}").size() > 0},
                             stages: [
                                 { entry ->
