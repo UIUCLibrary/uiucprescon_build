@@ -12,27 +12,57 @@ ARG PIPX_HOME=/pipx
 ARG PIP_DOWNLOAD_CACHE=/.cache/pip
 FROM ubuntu:22.04 AS base
 COPY ci/docker/linux/tox/apt-packages.txt /tmp/
+ARG UBUNTU_APT_PROXY
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     --mount=target=/var/cache/apt,type=cache,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    <<EOF
+      if [ -n "$UBUNTU_APT_PROXY" ]; then
+cat <<EOT > /etc/apt/sources.list.d/apt-proxy.sources
+Types: deb
+URIs: $UBUNTU_APT_PROXY
+Suites: jammy jammy-updates jammy-backports jammy-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOT
+    else \
+      echo "APT proxy is not set, using default sources "; \
+    fi && \
     apt-get update && \
     apt-get install -y software-properties-common gpg-agent --no-install-recommends && \
     add-apt-repository ppa:deadsnakes/ppa && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     apt-get update && \
      < /tmp/apt-packages.txt xargs apt-get install -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    if [ -n "$UBUNTU_APT_PROXY" ]; then
+      rm -f /etc/apt/sources.list.d/apt-proxy.sources && \
+      echo "APT proxy sources removed"; \
+    fi
+EOF
 
 FROM base AS conan_builder
 ARG CONAN_USER_HOME
+ARG UBUNTU_APT_PROXY
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     --mount=target=/var/cache/apt,type=cache,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    <<EOF
+      if [ -n "$UBUNTU_APT_PROXY" ]; then
+cat <<EOT > /etc/apt/sources.list.d/apt-proxy.sources
+Types: deb
+URIs: $UBUNTU_APT_PROXY
+Suites: jammy jammy-updates jammy-backports jammy-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOT
+    else \
+      echo "APT proxy is not set, using default sources "; \
+    fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends jq && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    if [ -n "$UBUNTU_APT_PROXY" ]; then
+      rm -f /etc/apt/sources.list.d/apt-proxy.sources && \
+      echo "APT proxy sources removed"; \
+    fi
+EOF
 ARG CONAN_DOWNLOAD_CACHE=/tmp/conan_download_cache
 ARG CONAN_CENTER_PROXY_V2_URL
 ARG CONAN_HOME
