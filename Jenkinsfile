@@ -554,10 +554,7 @@ pipeline {
                                                                         retry(3){
                                                                             try{
                                                                                 sh( label: 'Running Tox',
-                                                                                    script: """python3 -m venv venv --clear
-                                                                                               ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                               ./venv/bin/uv run --frozen --group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
-                                                                                            """
+                                                                                    script: "uv run --frozen --group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv"
                                                                                     )
                                                                             } catch(e) {
                                                                                 cleanWs(
