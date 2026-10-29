@@ -30,9 +30,10 @@ build_ext_info = "uiucprescon.build.introspection:BuildExtInfo"
 build_conan = "uiucprescon.build.conan_libs:BuildConan"
 
 [dependency-groups]
+conan = ["conan>=2.0", "cmake"]
 test = [
     "pytest",
-    "conan>=2.0"
+    {include-group = "conan"},
 ]
 tox = [
     "tox"

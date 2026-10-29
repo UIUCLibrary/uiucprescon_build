@@ -553,14 +553,9 @@ pipeline {
                                                                     image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp"){
                                                                         retry(3){
                                                                             try{
-                                                                                withEnv(["TOX_UV_PATH=${WORKSPACE}/venv/bin/uv"]){
-                                                                                    sh( label: 'Running Tox',
-                                                                                        script: """python3 -m venv venv --clear
-                                                                                                   ./venv/bin/pip install --disable-pip-version-check uv
-                                                                                                   ./venv/bin/uv run --frozen --group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
-                                                                                                """
-                                                                                        )
-                                                                                }
+                                                                                sh( label: 'Running Tox',
+                                                                                    script: "uv run --frozen --group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv"
+                                                                                    )
                                                                             } catch(e) {
                                                                                 cleanWs(
                                                                                     notFailBuild: true,
