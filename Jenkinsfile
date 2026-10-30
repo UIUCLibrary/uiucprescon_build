@@ -533,7 +533,7 @@ pipeline {
                                     }
                                     parallel(
                                         envs.collectEntries{toxEnv ->
-                                            def version = toxEnv.replaceAll(/py(\d)(\d+).*/, '$1.$2')
+                                            def version = toxEnv.replaceAll(/py(\d)(\d+)([t]?).*/, '$1.$2$3')
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
@@ -551,6 +551,7 @@ pipeline {
                                                             ]){
                                                                 try{
                                                                     image.inside("--label=purpose=ci --label \"JOB_NAME=\$JOB_NAME\" --label \"absoluteUrl=${currentBuild.absoluteUrl}\" --label \"BUILD_NUMBER=${currentBuild.number}\" --mount source=python-tmp-uiucprescon_build,target=/tmp"){
+                                                                        sh(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${version} --quiet 2>/dev/null || uv python install cpython-${version}")
                                                                         retry(3){
                                                                             try{
                                                                                 sh( label: 'Running Tox',
@@ -627,7 +628,7 @@ pipeline {
                                     }
                                     parallel(
                                         envs.collectEntries{toxEnv ->
-                                            def version = toxEnv.replaceAll(/py(\d)(\d+).*/, '$1.$2')
+                                            def version = toxEnv.replaceAll(/py(\d)(\d+)([t]?).*/, '$1.$2$3')
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
@@ -658,13 +659,12 @@ pipeline {
                                                                              --mount type=volume,source=uv_cache_dir,target=${env.UV_CACHE_DIR}\
                                                                              "
                                                                          ){
+                                                                            bat(label: 'Installing required Python version if not already installed', script: "uv python find cpython-${version} --quiet 2>nul || uv python install cpython-${version}")
                                                                             retry(3){
                                                                                 try{
                                                                                     timeout(120){
                                                                                         bat(label: 'Running Tox',
-                                                                                            script: """uv python install cpython-${version}
-                                                                                                       uv run --frozen --only-group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv
-                                                                                                """
+                                                                                            script: "uv run --frozen --only-group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vv"
                                                                                         )
                                                                                     }
                                                                                 } catch(e) {
@@ -704,7 +704,6 @@ pipeline {
                             }
                             environment{
                                 UV_PROJECT_ENVIRONMENT='./venv'
-                                UV_PYTHON_PREFERENCE='only-system'
                             }
                             steps{
                                 script{
@@ -725,18 +724,20 @@ pipeline {
                                     }
                                     parallel(
                                         envs.collectEntries{toxEnv ->
-                                            def version = toxEnv.replaceAll(/py(\d)(\d+).*/, '$1.$2')
+                                            def version = toxEnv.replaceAll(/py(\d)(\d+)([t]?).*/, '$1.$2$3')
                                             [
                                                 "Tox Environment: ${toxEnv}",
                                                 {
                                                     node('mac && python3'){
                                                         checkout scm
                                                         withEnv(["UV_CONFIG_FILE=${createUnixUvConfig()}",]){
+                                                            sh 'python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv'
+                                                            sh(label: 'Installing required Python version if not already installed', script: "venv/bin/uv python find cpython-${version} --quiet 2>/dev/null || venv/bin/uv python install cpython-${version}")
                                                             try{
                                                                 retry(3){
                                                                     try{
                                                                         sh( label: 'Running Tox',
-                                                                            script: """python3 -m venv venv --clear && ./venv/bin/pip install --disable-pip-version-check uv
+                                                                            script: """./venv/bin/uv python install cpython-${version}
                                                                                         ./venv/bin/uv run --frozen --only-group=tox-uv tox run -e ${toxEnv} --runner uv-venv-lock-runner -vvv
                                                                                     """
                                                                         )
